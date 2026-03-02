@@ -1,139 +1,119 @@
 // api/crawl.js - Vercel Serverless Function
-// Crawls support.teamtailor.com and stores embeddings in Pinecone
-// Runs on a weekly cron schedule via vercel.json
+// Crawls support.teamtailor.com using collection/article scraping
 
 const PINECONE_HOST = process.env.PINECONE_HOST;
 const PINECONE_API_KEY = process.env.PINECONE_API_KEY;
-const ANTHROPIC_API_KEY = process.env.VITE_ANTHROPIC_KEY;
 const CRON_SECRET = process.env.CRON_SECRET;
+const BASE_URL = "https://support.teamtailor.com";
 
-const SITEMAP_URL = "https://support.teamtailor.com/sitemap.xml";
-
-async function fetchSitemap() {
-  const res = await fetch(SITEMAP_URL);
-  const xml = await res.text();
-  const urls = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)]
-    .map((m) => m[1])
-    .filter((url) => url.includes("/en/") && !url.endsWith("/en/"));
-  return urls.slice(0, 150); // cap at 150 articles to stay within limits
+async function scrapeCollectionLinks() {
+  const res = await fetch(`${BASE_URL}/en/`, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; TailoredBot/1.0)" },
+  });
+  const html = await res.text();
+  const urls = [...html.matchAll(/href="(\/en\/collections\/[^"]+)"/g)]
+    .map((m) => `${BASE_URL}${m[1]}`);
+  return [...new Set(urls)];
 }
 
-async function fetchArticle(url) {
+async function scrapeArticleLinks(collectionUrl) {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(collectionUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; TailoredBot/1.0)" },
+      signal: AbortSignal.timeout(10000),
+    });
+    const html = await res.text();
+    const urls = [...html.matchAll(/href="(\/en\/articles\/[^"]+)"/g)]
+      .map((m) => `${BASE_URL}${m[1]}`);
+    return [...new Set(urls)];
+  } catch { return []; }
+}
+
+async function scrapeArticle(url) {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; TailoredBot/1.0)" },
+      signal: AbortSignal.timeout(10000),
+    });
     const html = await res.text();
 
-    // Extract title
     const titleMatch = html.match(/<h1[^>]*>(.*?)<\/h1>/s);
-    const title = titleMatch
-      ? titleMatch[1].replace(/<[^>]+>/g, "").trim()
-      : "";
-
-    // Extract main content - try article body first, fall back to main
-    const bodyMatch =
-      html.match(/<article[^>]*>([\s\S]*?)<\/article>/i) ||
-      html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, "").trim() : "";
 
     let text = "";
+    const bodyMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+      || html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+
     if (bodyMatch) {
       text = bodyMatch[1]
         .replace(/<script[\s\S]*?<\/script>/gi, "")
         .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<nav[\s\S]*?<\/nav>/gi, "")
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 2000); // keep chunks manageable
+        .trim();
     }
 
-    if (!text || text.length < 100) return null;
-    return { url, title, text };
-  } catch {
-    return null;
-  }
+    if (!title && text.length < 50) return null;
+    return { url, title: title || url.split("/").pop().replace(/-/g, " "), text: text.slice(0, 2500) };
+  } catch { return null; }
 }
 
 async function getEmbedding(text) {
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
+  const res = await fetch("https://api.pinecone.io/embed", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
+    headers: { "Content-Type": "application/json", "Api-Key": PINECONE_API_KEY },
     body: JSON.stringify({
       model: "llama-text-embed-v2",
-      input: text.slice(0, 3000),
+      inputs: [{ text: text.slice(0, 3000) }],
+      parameters: { input_type: "passage" },
     }),
   });
-
-  // Use Pinecone's inference API instead (works with llama-text-embed-v2)
-  const pineconeRes = await fetch(
-    "https://api.pinecone.io/embed",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Api-Key": PINECONE_API_KEY,
-      },
-      body: JSON.stringify({
-        model: "llama-text-embed-v2",
-        inputs: [{ text: text.slice(0, 3000) }],
-        parameters: { input_type: "passage" },
-      }),
-    }
-  );
-
-  const data = await pineconeRes.json();
+  const data = await res.json();
   return data?.data?.[0]?.values;
 }
 
 async function upsertToPinecone(vectors) {
   const res = await fetch(`${PINECONE_HOST}/vectors/upsert`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Api-Key": PINECONE_API_KEY,
-    },
+    headers: { "Content-Type": "application/json", "Api-Key": PINECONE_API_KEY },
     body: JSON.stringify({ vectors }),
   });
   return res.json();
 }
 
 export default async function handler(req, res) {
-  // Verify this is called by Vercel Cron or manually with secret
-  const authHeader = req.headers.authorization;
-  if (authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (req.headers.authorization !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
-    console.log("Starting crawl of Teamtailor support site...");
-    const urls = await fetchSitemap();
-    console.log(`Found ${urls.length} URLs to crawl`);
+    const collectionUrls = await scrapeCollectionLinks();
+    console.log(`Found ${collectionUrls.length} collections`);
+
+    const allArticleUrls = [];
+    for (const colUrl of collectionUrls) {
+      const articles = await scrapeArticleLinks(colUrl);
+      allArticleUrls.push(...articles);
+      await new Promise((r) => setTimeout(r, 300));
+    }
+
+    const uniqueUrls = [...new Set(allArticleUrls)].slice(0, 200);
+    console.log(`Found ${uniqueUrls.length} articles`);
 
     let processed = 0;
-    let failed = 0;
-    const batchSize = 10;
-
-    for (let i = 0; i < urls.length; i += batchSize) {
-      const batch = urls.slice(i, i + batchSize);
-      const articles = await Promise.all(batch.map(fetchArticle));
-      const valid = articles.filter(Boolean);
+    for (let i = 0; i < uniqueUrls.length; i += 5) {
+      const batch = uniqueUrls.slice(i, i + 5);
+      const articles = (await Promise.all(batch.map(scrapeArticle))).filter(Boolean);
 
       const vectors = [];
-      for (const article of valid) {
-        const embedding = await getEmbedding(
-          `${article.title}\n\n${article.text}`
-        );
+      for (const article of articles) {
+        const embedding = await getEmbedding(`${article.title}\n\n${article.text}`);
         if (!embedding) continue;
-
         vectors.push({
           id: Buffer.from(article.url).toString("base64").slice(0, 64),
           values: embedding,
-          metadata: {
-            url: article.url,
-            title: article.title,
-            text: article.text.slice(0, 500),
-          },
+          metadata: { url: article.url, title: article.title, text: article.text.slice(0, 500) },
         });
       }
 
@@ -141,20 +121,11 @@ export default async function handler(req, res) {
         await upsertToPinecone(vectors);
         processed += vectors.length;
       }
-      failed += batch.length - valid.length;
-
-      // Small delay to be polite to the server
       await new Promise((r) => setTimeout(r, 500));
     }
 
-    return res.status(200).json({
-      success: true,
-      processed,
-      failed,
-      total: urls.length,
-    });
+    return res.status(200).json({ success: true, processed, total: uniqueUrls.length });
   } catch (err) {
-    console.error("Crawl error:", err);
     return res.status(500).json({ error: err.message });
   }
 }
