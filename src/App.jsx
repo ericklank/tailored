@@ -436,6 +436,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  const [articles, setArticles] = useState([]);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
 
@@ -514,6 +515,26 @@ export default function App() {
       const text = data.content[0].text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(text);
       setResults(parsed);
+
+      // Search for relevant support articles based on objections + situation
+      try {
+        const query = [
+          ...(parsed.currentSituation || []),
+          ...(parsed.objectionsRaised || []),
+        ].join(" ");
+
+        const searchRes = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query }),
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          setArticles(searchData.articles || []);
+        }
+      } catch {
+        // Articles are optional, don't fail the whole analysis
+      }
     } catch (err) {
       setError(err.message || "Something went wrong. Check your API key and try again.");
     } finally {
@@ -619,9 +640,49 @@ export default function App() {
                 ))}
               </div>
 
-              <button className="reset-btn" onClick={() => { setResults(null); setFile(null); }}>
+              <button className="reset-btn" onClick={() => { setResults(null); setFile(null); setArticles([]); }}>
                 ← Analyze another call
               </button>
+
+              {articles.length > 0 && (
+                <div style={{ marginTop: 32 }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 700, letterSpacing: 2,
+                    textTransform: "uppercase", color: "var(--text-muted)",
+                    marginBottom: 14
+                  }}>
+                    Relevant Support Articles
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {articles.map((a, i) => (
+                      <a
+                        key={i}
+                        href={a.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "block",
+                          padding: "14px 18px",
+                          background: "var(--surface)",
+                          border: "1.5px solid var(--border)",
+                          borderRadius: 10,
+                          textDecoration: "none",
+                          transition: "border-color 0.2s",
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = "var(--pink)"}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--pink)", marginBottom: 4 }}>
+                          {a.title}
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                          {a.excerpt?.slice(0, 120)}...
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
