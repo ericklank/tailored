@@ -440,7 +440,9 @@ const styles = `
 
 export default function App() {
   const [file, setFile] = useState(null);
-  const [apiKey, setApiKey] = useState("");
+  const [password, setPassword] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [articles, setArticles] = useState([]);
@@ -449,6 +451,21 @@ export default function App() {
   const [crawling, setCrawling] = useState(false);
   const [crawlStatus, setCrawlStatus] = useState("");
   const [importing, setImporting] = useState(false);
+
+  const handleLogin = async () => {
+    // Quick check against the analyze endpoint
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, messages: [{ role: "user", content: "hi" }], system: "Say ok" }),
+    });
+    if (res.status === 401) {
+      setAuthError("Incorrect password, try again.");
+    } else {
+      setAuthed(true);
+      setAuthError("");
+    }
+  };
 
   const handleFile = (f) => {
     if (f && f.type === "application/pdf") {
@@ -474,7 +491,7 @@ export default function App() {
     });
 
   const analyze = async () => {
-    if (!file || !apiKey) return;
+    if (!file) return;
     setLoading(true);
     setError("");
     setResults(null);
@@ -482,17 +499,11 @@ export default function App() {
     try {
       const base64 = await toBase64(file);
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/analyze", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1500,
+          password,
           system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these five keys: currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps.
 
 Rules:
@@ -509,16 +520,9 @@ Each key should contain an array of strings except positiveOutcomes and suggeste
               content: [
                 {
                   type: "document",
-                  source: {
-                    type: "base64",
-                    media_type: "application/pdf",
-                    data: base64,
-                  },
+                  source: { type: "base64", media_type: "application/pdf", data: base64 },
                 },
-                {
-                  type: "text",
-                  text: "Analyze this sales call transcript and return the JSON summary.",
-                },
+                { type: "text", text: "Analyze this sales call transcript and return the JSON summary." },
               ],
             },
           ],
@@ -695,7 +699,28 @@ Each key should contain an array of strings except positiveOutcomes and suggeste
             </div>
           )}
 
-          {!loading && !results && (
+          {!loading && !results && !authed && (
+            <div style={{ maxWidth: 400, margin: "80px auto", textAlign: "center" }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+              <div style={{ fontFamily: "'DM Sans'", fontSize: 22, fontWeight: 700, marginBottom: 8, color: "var(--text)" }}>Welcome to Tailored</div>
+              <div style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 32 }}>Enter your team password to get started</div>
+              <input
+                type="password"
+                className="api-input"
+                placeholder="Enter password..."
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                style={{ width: "100%", marginBottom: 12, textAlign: "center", fontSize: 16 }}
+              />
+              {authError && <div className="error-box" style={{ marginBottom: 12 }}>⚠ {authError}</div>}
+              <button className="analyze-btn" onClick={handleLogin} disabled={!password}>
+                Enter →
+              </button>
+            </div>
+          )}
+
+          {!loading && !results && authed && (
             <>
               <div className="page-title">Analyze a call</div>
               <div className="page-sub">Upload a transcript PDF and get an instant structured breakdown.</div>
@@ -726,22 +751,11 @@ Each key should contain an array of strings except positiveOutcomes and suggeste
                 </div>
               )}
 
-              <div className="api-row">
-                <span className="api-label">API Key</span>
-                <input
-                  type="password"
-                  className="api-input"
-                  placeholder="sk-ant-..."
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-              </div>
-
               {error && <div className="error-box">⚠ {error}</div>}
 
               <button
                 className="analyze-btn"
-                disabled={!file || !apiKey}
+                disabled={!file}
                 onClick={analyze}
               >
                 Analyze Transcript
