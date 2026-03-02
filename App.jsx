@@ -453,7 +453,6 @@ export default function App() {
   const [importing, setImporting] = useState(false);
 
   const handleLogin = async () => {
-    // Quick check against the analyze endpoint
     const res = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -465,6 +464,62 @@ export default function App() {
       setAuthed(true);
       setAuthError("");
     }
+  };
+
+  const getPricingText = (employeeCount) => {
+    if (!employeeCount || employeeCount === 0) return null;
+    const count = parseInt(employeeCount);
+    let tier, price;
+    if (count <= 50) { tier = "1–50"; price = "$3,600"; }
+    else if (count <= 100) { tier = "51–100"; price = "$4,800"; }
+    else if (count <= 250) { tier = "101–250"; price = "$7,200"; }
+    else if (count <= 400) { tier = "251–400"; price = "$10,800"; }
+    else if (count <= 600) { tier = "401–600"; price = "$13,200"; }
+    else if (count <= 1000) { tier = "601–1,000"; price = "$16,800"; }
+    else if (count <= 2000) { tier = "1,001–2,000"; price = "$24,000"; }
+    else { tier = "2,000+"; price = "custom"; }
+    return { tier, price };
+  };
+
+  const generateEmail = (results, outcomesWithArticles) => {
+    if (!results) return "";
+    const name = results.prospectName || "there";
+    const pricing = getPricingText(results.employeeCount);
+
+    const outcomeLines = (outcomesWithArticles || results.positiveOutcomes || [])
+      .map(item => {
+        const text = item.outcome || item;
+        const link = item.article?.url ? ` → ${item.article.url}` : "";
+        return `• ${text}${link}`;
+      }).join("\n");
+
+    const pricingSection = pricing
+      ? `\nPricing\nTeamtailor's pricing is based on headcount. With ${results.employeeCount} employees, you fall in the ${pricing.tier} employee range at ${pricing.price}/year. Implementation typically takes 30–60 days and you'll have a dedicated Customer Success Manager to support you throughout.\n`
+      : "";
+
+    return `Hi ${name},
+
+It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.
+
+Positive Outcomes with Teamtailor
+${outcomeLines}
+
+Other Resources
+• Teamtailor How-to Video Library — https://www.youtube.com/@teamtailor
+• Feature Library — https://www.teamtailor.com/features/
+• List of all AI capabilities — https://www.teamtailor.com/ai/
+${pricingSection}
+Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.
+
+Best,
+[Your name]`;
+  };
+
+  const [copied, setCopied] = useState(false);
+  const copyEmail = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleFile = (f) => {
@@ -504,16 +559,19 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           password,
-          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these five keys: currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps.
+          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these seven keys: prospectName, prospectCompany, employeeCount, currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps.
 
 Rules:
+- prospectName: string, first name of the prospect (the person being sold to, not the sales rep)
+- prospectCompany: string, name of the prospect's company
+- employeeCount: number, the employee count mentioned in the call (use the total headcount discussed for pricing purposes, default to 0 if not mentioned)
 - currentSituation: 3-5 bullets describing the prospect's current pain points and situation
 - positiveOutcomes: 3-8 objects for features ACTUALLY DISCUSSED in the call. Each object has: "outcome" (string: "[Feature Name] — [how it solves their specific problem]") and "articleQuery" (string: 3-6 word search query to find the most relevant Teamtailor support article)
 - suggestedOutcomes: 3-5 objects for Teamtailor features NOT discussed in the call but that would clearly benefit this prospect based on their situation, company size, industry, and pain points. Draw on your knowledge of ATS best practices. Each object has: "outcome" (string: "[Feature Name] — [why this would benefit them specifically]") and "articleQuery" (string: 3-6 word search query for the most relevant Teamtailor support article)
 - objectionsRaised: 3-5 bullets of concerns or blockers the prospect raised
 - recommendedNextSteps: 3-5 bullets of concrete next actions to move the deal forward
 
-Each key should contain an array of strings except positiveOutcomes and suggestedOutcomes which are arrays of objects. No preamble, no markdown, just raw JSON.`,
+Each key should contain an array of strings except positiveOutcomes and suggestedOutcomes which are arrays of objects, and prospectName/prospectCompany/employeeCount which are primitives. No preamble, no markdown, just raw JSON.`,
           messages: [
             {
               role: "user",
@@ -832,45 +890,55 @@ Each key should contain an array of strings except positiveOutcomes and suggeste
                 ← Analyze another call
               </button>
 
-              {articles.length > 0 && (
-                <div style={{ marginTop: 32 }}>
-                  <div style={{
-                    fontSize: 11, fontWeight: 700, letterSpacing: 2,
-                    textTransform: "uppercase", color: "var(--text-muted)",
-                    marginBottom: 14
-                  }}>
-                    Relevant Support Articles
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {articles.map((a, i) => (
-                      <a
-                        key={i}
-                        href={a.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+              {/* Follow-up Email Section */}
+              {(() => {
+                const emailText = generateEmail(results, results.positiveOutcomes);
+                return (
+                  <div style={{ marginTop: 48 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+                          📧 Follow-up Email
+                        </div>
+                        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                          Ready to send — copy and paste into your email client
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => copyEmail(emailText)}
                         style={{
-                          display: "block",
-                          padding: "14px 18px",
-                          background: "var(--surface)",
-                          border: "1.5px solid var(--border)",
+                          padding: "10px 20px",
+                          background: copied ? "#00C896" : "var(--pink)",
+                          color: "white",
+                          border: "none",
                           borderRadius: 10,
-                          textDecoration: "none",
-                          transition: "border-color 0.2s",
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          transition: "background 0.2s",
+                          whiteSpace: "nowrap",
                         }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = "var(--pink)"}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
                       >
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--pink)", marginBottom: 4 }}>
-                          {a.title}
-                        </div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
-                          {a.excerpt?.slice(0, 120)}...
-                        </div>
-                      </a>
-                    ))}
+                        {copied ? "✓ Copied!" : "Copy to Clipboard"}
+                      </button>
+                    </div>
+                    <div style={{
+                      background: "var(--surface)",
+                      border: "1.5px solid var(--border)",
+                      borderRadius: 14,
+                      padding: "28px 32px",
+                      fontFamily: "Georgia, serif",
+                      fontSize: 14,
+                      lineHeight: 1.8,
+                      color: "var(--text)",
+                      whiteSpace: "pre-wrap",
+                    }}>
+                      {emailText}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </main>
