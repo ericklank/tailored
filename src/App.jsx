@@ -490,11 +490,11 @@ export default function App() {
 
 Rules:
 - currentSituation: 3-5 bullets describing the prospect's current pain points and situation
-- positiveOutcomes: 3-8 bullets mapping SPECIFIC Teamtailor features discussed in the call to the prospect's pain points. Format each as: "[Feature Name] — [how it solves their specific problem]". Only include features actually mentioned or demoed in the call. Be specific and outcome-focused, not generic.
+- positiveOutcomes: 3-8 objects, each with two fields: "outcome" (string: "[Feature Name] — [how it solves their specific problem]") and "articleQuery" (string: a short 3-6 word search query to find the most relevant Teamtailor support article for this feature, e.g. "interview kits autofill transcription" or "career page builder"). Only include features actually mentioned or demoed in the call.
 - objectionsRaised: 3-5 bullets of concerns or blockers the prospect raised
 - recommendedNextSteps: 3-5 bullets of concrete next actions to move the deal forward
 
-Each key should contain an array of strings. No preamble, no markdown, just raw JSON.`,
+Each key should contain an array of strings except positiveOutcomes which is an array of objects. No preamble, no markdown, just raw JSON.`,
           messages: [
             {
               role: "user",
@@ -525,15 +525,34 @@ Each key should contain an array of strings. No preamble, no markdown, just raw 
 
       const text = data.content[0].text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(text);
-      setResults(parsed);
 
-      // Search for relevant support articles based on objections + situation
+      // Fetch a relevant article for each positive outcome
+      const outcomesWithArticles = await Promise.all(
+        (parsed.positiveOutcomes || []).map(async (item) => {
+          try {
+            const searchRes = await fetch("/api/search", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query: item.articleQuery || item.outcome || item }),
+            });
+            if (searchRes.ok) {
+              const searchData = await searchRes.json();
+              const topArticle = searchData.articles?.[0] || null;
+              return { ...item, article: topArticle };
+            }
+          } catch {}
+          return item;
+        })
+      );
+
+      setResults({ ...parsed, positiveOutcomes: outcomesWithArticles });
+
+      // Also fetch general articles for the sidebar based on objections
       try {
         const query = [
           ...(parsed.currentSituation || []),
           ...(parsed.objectionsRaised || []),
         ].join(" ");
-
         const searchRes = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -543,9 +562,7 @@ Each key should contain an array of strings. No preamble, no markdown, just raw 
           const searchData = await searchRes.json();
           setArticles(searchData.articles || []);
         }
-      } catch {
-        // Articles are optional, don't fail the whole analysis
-      }
+      } catch {}
     } catch (err) {
       setError(err.message || "Something went wrong. Check your API key and try again.");
     } finally {
@@ -737,9 +754,39 @@ Each key should contain an array of strings. No preamble, no markdown, just raw 
                       <span className="section-title">{s.label}</span>
                     </div>
                     <ul className="section-items">
-                      {(results[s.key] || []).map((item, i) => (
-                        <li className="section-item" key={i}>{item}</li>
-                      ))}
+                      {(results[s.key] || []).map((item, i) => {
+                        if (s.key === "positiveOutcomes" && item.outcome) {
+                          return (
+                            <li className="section-item" key={i}>
+                              {item.outcome}
+                              {item.article && (
+                                <a
+                                  href={item.article.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    marginTop: 5,
+                                    fontSize: 11,
+                                    color: "var(--pink)",
+                                    fontWeight: 600,
+                                    textDecoration: "none",
+                                    background: "var(--pink-pale)",
+                                    border: "1px solid var(--pink-border)",
+                                    borderRadius: 6,
+                                    padding: "3px 8px",
+                                  }}
+                                >
+                                  📄 {item.article.title}
+                                </a>
+                              )}
+                            </li>
+                          );
+                        }
+                        return <li className="section-item" key={i}>{typeof item === "string" ? item : item.outcome}</li>;
+                      })}
                     </ul>
                   </div>
                 ))}
