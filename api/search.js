@@ -1,42 +1,7 @@
-// api/search.js - Vercel Serverless Function
-// Queries Pinecone for support articles relevant to a given query
+// api/search.js - Uses Pinecone's inference search (handles embedding automatically)
 
 const PINECONE_HOST = process.env.PINECONE_HOST;
 const PINECONE_API_KEY = process.env.PINECONE_API_KEY;
-
-async function getEmbedding(text) {
-  const res = await fetch("https://api.pinecone.io/embed", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Api-Key": PINECONE_API_KEY,
-    },
-    body: JSON.stringify({
-      model: "llama-text-embed-v2",
-      inputs: [{ text: text.slice(0, 3000) }],
-      parameters: { input_type: "query" },
-    }),
-  });
-
-  const data = await res.json();
-  return data?.data?.[0]?.values;
-}
-
-async function queryPinecone(embedding, topK = 4) {
-  const res = await fetch(`${PINECONE_HOST}/query`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Api-Key": PINECONE_API_KEY,
-    },
-    body: JSON.stringify({
-      vector: embedding,
-      topK,
-      includeMetadata: true,
-    }),
-  });
-  return res.json();
-}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -47,17 +12,39 @@ export default async function handler(req, res) {
   if (!query) return res.status(400).json({ error: "Missing query" });
 
   try {
-    const embedding = await getEmbedding(query);
-    if (!embedding) throw new Error("Failed to generate embedding");
+    // Use Pinecone's search_records endpoint which handles embedding automatically
+    const res2 = await fetch(`${PINECONE_HOST}/records/namespaces/__default__/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Api-Key": PINECONE_API_KEY,
+        "X-Pinecone-API-Version": "2025-04",
+      },
+      body: JSON.stringify({
+        query: {
+          inputs: { text: query },
+          top_k: 3,
+        },
+        fields: ["title", "url", "text"],
+      }),
+    });
 
-    const results = await queryPinecone(embedding);
-    const articles = (results.matches || [])
-      .filter((m) => m.score > 0.5)
-      .map((m) => ({
-        title: m.metadata.title,
-        url: m.metadata.url,
-        excerpt: m.metadata.text,
-        score: m.score,
+    if (!res2.ok) {
+      const err = await res2.text();
+      console.error("Pinecone search error:", err);
+      return res.status(500).json({ error: err });
+    }
+
+    const data = await res2.json();
+    console.log("Pinecone response:", JSON.stringify(data).slice(0, 300));
+
+    const articles = (data.result?.hits || [])
+      .filter((h) => (h._score || 0) > 0.3)
+      .map((h) => ({
+        title: h.fields?.title || "",
+        url: h.fields?.url || "",
+        excerpt: h.fields?.text || "",
+        score: h._score,
       }));
 
     return res.status(200).json({ articles });
