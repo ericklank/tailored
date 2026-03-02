@@ -446,7 +446,7 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                     <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Ready to send — copy and paste into your email client</div>
                   </div>
                   <button
-                    onClick={=>copyEmail}
+                    onClick={copyEmail}
                     style={{
                       padding: "10px 20px", background: copied ? "#00C896" : "var(--pink)",
                       color: "white", border: "none", borderRadius: 10,
