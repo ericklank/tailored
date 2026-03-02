@@ -441,6 +441,7 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const [crawling, setCrawling] = useState(false);
   const [crawlStatus, setCrawlStatus] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const handleFile = (f) => {
     if (f && f.type === "application/pdf") {
@@ -548,7 +549,7 @@ export default function App() {
     const secret = prompt("Enter your CRON_SECRET:");
     if (!secret) return;
     setCrawling(true);
-    setCrawlStatus("Crawling support articles... this may take a few minutes.");
+    setCrawlStatus("Syncing articles...");
     try {
       const res = await fetch("/api/crawl", {
         headers: { Authorization: `Bearer ${secret}` },
@@ -563,6 +564,48 @@ export default function App() {
       setCrawlStatus(`✗ Failed: ${err.message}`);
     } finally {
       setCrawling(false);
+    }
+  };
+
+  const importArticles = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const secret = prompt("Enter your CRON_SECRET:");
+    if (!secret) return;
+
+    setImporting(true);
+    setCrawlStatus("Importing articles...");
+
+    try {
+      const text = await f.text();
+      const articles = JSON.parse(text);
+      const chunkSize = 50;
+      let totalProcessed = 0;
+
+      for (let i = 0; i < articles.length; i += chunkSize) {
+        const chunk = articles.slice(i, i + chunkSize);
+        setCrawlStatus(`Importing... ${Math.min(i + chunkSize, articles.length)}/${articles.length}`);
+
+        const res = await fetch("/api/ingest", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${secret}`,
+          },
+          body: JSON.stringify({ articles: chunk }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        totalProcessed += data.processed;
+      }
+
+      setCrawlStatus(`✓ Done! ${totalProcessed} articles indexed.`);
+    } catch (err) {
+      setCrawlStatus(`✗ Import failed: ${err.message}`);
+    } finally {
+      setImporting(false);
+      e.target.value = "";
     }
   };
 
@@ -581,25 +624,29 @@ export default function App() {
                 {crawlStatus}
               </span>
             )}
-            <button
-              onClick={runCrawl}
-              disabled={crawling}
+            <label
               style={{
                 padding: "7px 14px",
-                background: crawling ? "var(--surface)" : "var(--pink-muted)",
+                background: importing ? "var(--surface)" : "var(--pink-muted)",
                 border: "1.5px solid var(--pink-border)",
                 borderRadius: 8,
-                color: "var(--pink)",
+                color: importing ? "var(--text-muted)" : "var(--pink)",
                 fontFamily: "'DM Sans', sans-serif",
                 fontSize: 12,
                 fontWeight: 600,
-                cursor: crawling ? "not-allowed" : "pointer",
-                opacity: crawling ? 0.6 : 1,
+                cursor: importing ? "not-allowed" : "pointer",
                 transition: "all 0.2s",
               }}
             >
-              {crawling ? "Crawling..." : "↻ Sync Articles"}
-            </button>
+              {importing ? "Importing..." : "↑ Import Articles"}
+              <input
+                type="file"
+                accept=".json"
+                style={{ display: "none" }}
+                onChange={importArticles}
+                disabled={importing}
+              />
+            </label>
             <div className="tagline">Sales Intelligence</div>
           </div>
         </header>
