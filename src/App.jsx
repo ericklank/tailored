@@ -139,20 +139,29 @@ export default function App() {
     }
   };
 
-  const getPricingText = (employeeCount) => {
-    if (!employeeCount || employeeCount === 0) return null;
-    const count = parseInt(employeeCount);
-    let tier, price;
-    if (count <= 50) { tier = "1–50"; price = "$3,600"; }
-    else if (count <= 100) { tier = "51–100"; price = "$4,800"; }
-    else if (count <= 250) { tier = "101–250"; price = "$7,200"; }
-    else if (count <= 400) { tier = "251–400"; price = "$10,800"; }
-    else if (count <= 600) { tier = "401–600"; price = "$13,200"; }
-    else if (count <= 1000) { tier = "601–1,000"; price = "$16,800"; }
-    else if (count <= 2000) { tier = "1,001–2,000"; price = "$24,000"; }
-    else { tier = "2,000+"; price = "custom pricing"; }
-    return { tier, price };
-  };
+const getPricingText = (employeeCount) => {
+  if (!employeeCount || employeeCount === 0) return null;
+  const count = parseInt(employeeCount);
+  let tier, price;
+  if (count <= 5) { tier = "1–5"; price = "$1,250"; }
+  else if (count <= 25) { tier = "6–25"; price = "$3,025"; }
+  else if (count <= 50) { tier = "26–50"; price = "$4,125"; }
+  else if (count <= 75) { tier = "51–75"; price = "$6,000"; }
+  else if (count <= 100) { tier = "76–100"; price = "$8,000"; }
+  else if (count <= 150) { tier = "101–150"; price = "$9,000"; }
+  else if (count <= 250) { tier = "151–250"; price = "$10,500"; }
+  else if (count <= 400) { tier = "251–400"; price = "$12,000"; }
+  else if (count <= 600) { tier = "401–600"; price = "$13,000"; }
+  else if (count <= 800) { tier = "601–800"; price = "$15,000"; }
+  else if (count <= 1000) { tier = "801–1,000"; price = "$19,000"; }
+  else if (count <= 1500) { tier = "1,000–1,500"; price = "$23,000"; }
+  else if (count <= 2000) { tier = "1,500–2,000"; price = "$28,000"; }
+  else if (count <= 3000) { tier = "2,000–3,000"; price = "$33,000"; }
+  else if (count <= 4000) { tier = "3,000–4,000"; price = "$40,000"; }
+  else if (count <= 5000) { tier = "4,000–5,000"; price = "$50,000"; }
+  else { tier = "5,000+"; price = "POA"; }
+  return { tier, price };
+};
 
   const generatePlainEmail = (res) => {
     if (!res) return "";
