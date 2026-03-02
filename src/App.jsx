@@ -169,7 +169,7 @@ export default function App() {
     return `Hi ${name},\n\nIt was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.\n\nPositive Outcomes with Teamtailor\n${outcomeLines}\n\nOther Resources\n• Teamtailor How-to Video Library — https://www.youtube.com/@teamtailor\n• Feature Library — https://www.teamtailor.com/features/\n• List of all AI capabilities — https://www.teamtailor.com/ai/${pricingSection}\n\nLet me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.\n\nBest,\n[Your name]`;
   };
 
-  const copyEmail = (text) => {
+ const copyEmail = (text) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -432,7 +432,7 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                     <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Ready to send — copy and paste into your email client</div>
                   </div>
                   <button
-                    onClick={() => copyEmail(generatePlainEmail(results))}
+                    onClick={=>copyEmail}
                     style={{
                       padding: "10px 20px", background: copied ? "#00C896" : "var(--pink)",
                       color: "white", border: "none", borderRadius: 10,
