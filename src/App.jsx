@@ -119,10 +119,12 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  const [stories, setStories] = useState([]);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [crawlStatus, setCrawlStatus] = useState("");
   const [importing, setImporting] = useState(false);
+  const [importingStories, setImportingStories] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleLogin = async () => {
@@ -139,46 +141,31 @@ export default function App() {
     }
   };
 
-const getPricingText = (employeeCount) => {
-  if (!employeeCount || employeeCount === 0) return null;
-  const count = parseInt(employeeCount);
-  let tier, price;
-  if (count <= 5) { tier = "1–5"; price = "$1,250"; }
-  else if (count <= 25) { tier = "6–25"; price = "$3,025"; }
-  else if (count <= 50) { tier = "26–50"; price = "$4,125"; }
-  else if (count <= 75) { tier = "51–75"; price = "$6,000"; }
-  else if (count <= 100) { tier = "76–100"; price = "$8,000"; }
-  else if (count <= 150) { tier = "101–150"; price = "$9,000"; }
-  else if (count <= 250) { tier = "151–250"; price = "$10,500"; }
-  else if (count <= 400) { tier = "251–400"; price = "$12,000"; }
-  else if (count <= 600) { tier = "401–600"; price = "$13,000"; }
-  else if (count <= 800) { tier = "601–800"; price = "$15,000"; }
-  else if (count <= 1000) { tier = "801–1,000"; price = "$19,000"; }
-  else if (count <= 1500) { tier = "1,000–1,500"; price = "$23,000"; }
-  else if (count <= 2000) { tier = "1,500–2,000"; price = "$28,000"; }
-  else if (count <= 3000) { tier = "2,000–3,000"; price = "$33,000"; }
-  else if (count <= 4000) { tier = "3,000–4,000"; price = "$40,000"; }
-  else if (count <= 5000) { tier = "4,000–5,000"; price = "$50,000"; }
-  else { tier = "5,000+"; price = "POA"; }
-  return { tier, price };
-};
-
-  const generatePlainEmail = (res) => {
-    if (!res) return "";
-    const name = res.prospectName || "there";
-    const pricing = getPricingText(res.employeeCount);
-    const outcomeLines = (res.positiveOutcomes || []).map(item => {
-      const text = item.outcome || item;
-      const url = item.article?.url;
-      return url ? `• ${text} → ${url}` : `• ${text}`;
-    }).join("\n");
-    const pricingSection = pricing
-      ? `\nPricing\nTeamtailor's pricing is based on headcount. With ${res.employeeCount} employees, you fall in the ${pricing.tier} employee range at ${pricing.price}/year. Implementation typically takes 30–60 days and you'll have a dedicated Customer Success Manager to support you throughout.\n`
-      : "";
-    return `Hi ${name},\n\nIt was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.\n\nPositive Outcomes with Teamtailor\n${outcomeLines}\n\nOther Resources\n• Teamtailor How-to Video Library — https://www.youtube.com/@teamtailor\n• Feature Library — https://www.teamtailor.com/features/\n• List of all AI capabilities — https://www.teamtailor.com/ai/${pricingSection}\n\nLet me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.\n\nBest,\n[Your name]`;
+  const getPricingText = (employeeCount) => {
+    if (!employeeCount || employeeCount === 0) return null;
+    const count = parseInt(employeeCount);
+    let tier, price;
+    if (count <= 5) { tier = "1–5"; price = "$1,250"; }
+    else if (count <= 25) { tier = "6–25"; price = "$3,025"; }
+    else if (count <= 50) { tier = "26–50"; price = "$4,125"; }
+    else if (count <= 75) { tier = "51–75"; price = "$6,000"; }
+    else if (count <= 100) { tier = "76–100"; price = "$8,000"; }
+    else if (count <= 150) { tier = "101–150"; price = "$9,000"; }
+    else if (count <= 250) { tier = "151–250"; price = "$10,500"; }
+    else if (count <= 400) { tier = "251–400"; price = "$12,000"; }
+    else if (count <= 600) { tier = "401–600"; price = "$13,000"; }
+    else if (count <= 800) { tier = "601–800"; price = "$15,000"; }
+    else if (count <= 1000) { tier = "801–1,000"; price = "$19,000"; }
+    else if (count <= 1500) { tier = "1,000–1,500"; price = "$23,000"; }
+    else if (count <= 2000) { tier = "1,500–2,000"; price = "$28,000"; }
+    else if (count <= 3000) { tier = "2,000–3,000"; price = "$33,000"; }
+    else if (count <= 4000) { tier = "3,000–4,000"; price = "$40,000"; }
+    else if (count <= 5000) { tier = "4,000–5,000"; price = "$50,000"; }
+    else { tier = "5,000+"; price = "POA"; }
+    return { tier, price };
   };
 
- const copyEmail = () => {
+  const copyEmail = () => {
     const name = results?.prospectName || "there";
     const pricing = getPricingText(results?.employeeCount);
     const outcomeItems = (results?.positiveOutcomes || []).map(item => {
@@ -189,8 +176,20 @@ const getPricingText = (employeeCount) => {
       const rest = dashIdx > -1 ? text.slice(dashIdx) : "";
       return `<li style="margin-bottom:8px">${url ? `<a href="${url}">${featureName}</a>${rest}` : `<strong>${featureName}</strong>${rest}`}</li>`;
     }).join("");
-    const pricingSection = pricing ? `<p><strong>Pricing</strong></p><p>Teamtailor's pricing is based on headcount. With ${results.employeeCount} employees, you fall in the ${pricing.tier} employee range at ${pricing.price}/year. Implementation typically takes 30–60 days and you'll have a dedicated Customer Success Manager to support you throughout.</p>` : "";
-    const html = `<p>Hi ${name},</p><p>It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.</p><p><strong>Positive Outcomes with Teamtailor</strong></p><ul>${outcomeItems}</ul><p><strong>Other Resources</strong></p><ul><li><a href="https://www.youtube.com/@teamtailor">Teamtailor How-to Video Library</a> — a great overview of different capabilities</li><li><a href="https://www.teamtailor.com/features/">Feature Library</a> — while we discussed a lot, we likely have even more that could help</li><li><a href="https://www.teamtailor.com/ai/">List of all AI capabilities</a></li></ul>${pricingSection}<p>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p><p>Best,<br/>[Your name]</p>`;
+
+    const storyItems = stories.map(s =>
+      `<li style="margin-bottom:8px"><a href="${s.url}">${s.title}</a></li>`
+    ).join("");
+    const storiesSection = stories.length > 0
+      ? `<p><strong>Customers Like You</strong></p><ul>${storyItems}</ul>`
+      : "";
+
+    const pricingSection = pricing
+      ? `<p><strong>Pricing</strong></p><p>Teamtailor's pricing is based on headcount. With ${results.employeeCount} employees, you fall in the ${pricing.tier} employee range at ${pricing.price}/year. Implementation typically takes 30–60 days and you'll have a dedicated Customer Success Manager to support you throughout.</p>`
+      : "";
+
+    const html = `<p>Hi ${name},</p><p>It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.</p><p><strong>Positive Outcomes with Teamtailor</strong></p><ul>${outcomeItems}</ul>${storiesSection}<p><strong>Other Resources</strong></p><ul><li><a href="https://www.youtube.com/@teamtailor">Teamtailor How-to Video Library</a> — a great overview of different capabilities</li><li><a href="https://www.teamtailor.com/features/">Feature Library</a> — while we discussed a lot, we likely have even more that could help</li><li><a href="https://www.teamtailor.com/ai/">List of all AI capabilities</a></li></ul>${pricingSection}<p>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p><p>Best,<br/>[Your name]</p>`;
+
     const blob = new Blob([html], { type: "text/html" });
     const plainBlob = new Blob([html.replace(/<[^>]+>/g, "")], { type: "text/plain" });
     const item = new ClipboardItem({ "text/html": blob, "text/plain": plainBlob });
@@ -198,6 +197,7 @@ const getPricingText = (employeeCount) => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
+
   const handleFile = (f) => {
     if (f && f.type === "application/pdf") { setFile(f); setError(""); }
     else setError("Please upload a PDF file.");
@@ -216,7 +216,7 @@ const getPricingText = (employeeCount) => {
 
   const analyze = async () => {
     if (!file) return;
-    setLoading(true); setError(""); setResults(null);
+    setLoading(true); setError(""); setResults(null); setStories([]);
     try {
       const base64 = await toBase64(file);
       const response = await fetch("/api/analyze", {
@@ -271,7 +271,26 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
         Promise.all((parsed.suggestedOutcomes || []).map(fetchArticleForOutcome)),
       ]);
 
-      setResults({ ...parsed, positiveOutcomes: outcomesWithArticles, suggestedOutcomes: suggestedWithArticles });
+      const finalResults = { ...parsed, positiveOutcomes: outcomesWithArticles, suggestedOutcomes: suggestedWithArticles };
+      setResults(finalResults);
+
+      // Fetch relevant customer stories
+      try {
+        const storyQuery = [
+          parsed.prospectCompany || "",
+          ...(parsed.currentSituation || []).slice(0, 2),
+        ].join(" ");
+        const storyRes = await fetch("/api/search-stories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: storyQuery }),
+        });
+        if (storyRes.ok) {
+          const storyData = await storyRes.json();
+          setStories(storyData.stories || []);
+        }
+      } catch {}
+
     } catch (err) {
       setError(err.message || "Something went wrong.");
     } finally {
@@ -310,6 +329,37 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
     }
   };
 
+  const importStories = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const secret = prompt("Enter your CRON_SECRET:");
+    if (!secret) return;
+    setImportingStories(true); setCrawlStatus("Importing stories...");
+    try {
+      const text = await f.text();
+      const storiesData = JSON.parse(text);
+      const chunkSize = 10;
+      let totalProcessed = 0;
+      for (let i = 0; i < storiesData.length; i += chunkSize) {
+        const chunk = storiesData.slice(i, i + chunkSize);
+        setCrawlStatus(`Importing stories... ${Math.min(i + chunkSize, storiesData.length)}/${storiesData.length}`);
+        const res = await fetch("/api/ingest-stories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
+          body: JSON.stringify({ stories: chunk }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        totalProcessed += data.processed;
+      }
+      setCrawlStatus(`✓ Done! ${totalProcessed} stories indexed.`);
+    } catch (err) {
+      setCrawlStatus(`✗ Stories import failed: ${err.message}`);
+    } finally {
+      setImportingStories(false); e.target.value = "";
+    }
+  };
+
   return (
     <>
       <style>{styles}</style>
@@ -325,6 +375,16 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                 {crawlStatus}
               </span>
             )}
+            <label style={{
+              padding: "7px 14px", background: importingStories ? "var(--surface)" : "var(--pink-muted)",
+              border: "1.5px solid var(--pink-border)", borderRadius: 8,
+              color: importingStories ? "var(--text-muted)" : "var(--pink)",
+              fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 600,
+              cursor: importingStories ? "not-allowed" : "pointer", transition: "all 0.2s",
+            }}>
+              {importingStories ? "Importing..." : "↑ Import Stories"}
+              <input type="file" accept=".json" style={{ display: "none" }} onChange={importStories} disabled={importingStories} />
+            </label>
             <label style={{
               padding: "7px 14px", background: importing ? "var(--surface)" : "var(--pink-muted)",
               border: "1.5px solid var(--pink-border)", borderRadius: 8,
@@ -444,10 +504,36 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                 ))}
               </div>
 
-              <button className="reset-btn" onClick={() => { setResults(null); setFile(null); }}>
+              {/* Customer Stories Card */}
+              {stories.length > 0 && (
+                <div className="section-card" style={{ marginBottom: 24 }}>
+                  <div className="section-header">
+                    <div className="section-pip" style={{ background: "#6C63FF" }} />
+                    <span className="section-title">Customers Like You</span>
+                    <span style={{
+                      marginLeft: "auto", fontSize: 11, fontWeight: 600, color: "#6C63FF",
+                      background: "#6C63FF15", border: "1px solid #6C63FF40",
+                      borderRadius: 6, padding: "2px 8px",
+                    }}>🏆 Success Stories</span>
+                  </div>
+                  <ul className="section-items">
+                    {stories.map((s, i) => (
+                      <li className="section-item" key={i}>
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: "#6C63FF", fontWeight: 600, textDecoration: "none" }}>
+                          {s.title}
+                        </a>
+                        {s.excerpt && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{s.excerpt}...</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <button className="reset-btn" onClick={() => { setResults(null); setFile(null); setStories([]); }}>
                 ← Analyze another call
               </button>
 
+              {/* Follow-up Email */}
               <div style={{ marginTop: 16, marginBottom: 60 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <div>
@@ -495,6 +581,19 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                       );
                     })}
                   </ul>
+
+                  {stories.length > 0 && (
+                    <>
+                      <p style={{ margin: "0 0 10px", fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>Customers Like You</p>
+                      <ul style={{ margin: "0 0 24px", paddingLeft: 20 }}>
+                        {stories.map((s, i) => (
+                          <li key={i} style={{ marginBottom: 8 }}>
+                            <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--pink)", fontWeight: 600 }}>{s.title}</a>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
 
                   <p style={{ margin: "0 0 10px", fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>Other Resources</p>
                   <ul style={{ margin: "0 0 24px", paddingLeft: 20 }}>
