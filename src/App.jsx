@@ -169,12 +169,26 @@ export default function App() {
     return `Hi ${name},\n\nIt was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.\n\nPositive Outcomes with Teamtailor\n${outcomeLines}\n\nOther Resources\n• Teamtailor How-to Video Library — https://www.youtube.com/@teamtailor\n• Feature Library — https://www.teamtailor.com/features/\n• List of all AI capabilities — https://www.teamtailor.com/ai/${pricingSection}\n\nLet me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.\n\nBest,\n[Your name]`;
   };
 
- const copyEmail = (text) => {
-    navigator.clipboard.writeText(text);
+ const copyEmail = () => {
+    const name = results?.prospectName || "there";
+    const pricing = getPricingText(results?.employeeCount);
+    const outcomeItems = (results?.positiveOutcomes || []).map(item => {
+      const text = item.outcome || item;
+      const url = item.article?.url;
+      const dashIdx = text.indexOf(" — ");
+      const featureName = dashIdx > -1 ? text.slice(0, dashIdx) : text;
+      const rest = dashIdx > -1 ? text.slice(dashIdx) : "";
+      return `<li style="margin-bottom:8px">${url ? `<a href="${url}">${featureName}</a>${rest}` : `<strong>${featureName}</strong>${rest}`}</li>`;
+    }).join("");
+    const pricingSection = pricing ? `<p><strong>Pricing</strong></p><p>Teamtailor's pricing is based on headcount. With ${results.employeeCount} employees, you fall in the ${pricing.tier} employee range at ${pricing.price}/year. Implementation typically takes 30–60 days and you'll have a dedicated Customer Success Manager to support you throughout.</p>` : "";
+    const html = `<p>Hi ${name},</p><p>It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.</p><p><strong>Positive Outcomes with Teamtailor</strong></p><ul>${outcomeItems}</ul><p><strong>Other Resources</strong></p><ul><li><a href="https://www.youtube.com/@teamtailor">Teamtailor How-to Video Library</a> — a great overview of different capabilities</li><li><a href="https://www.teamtailor.com/features/">Feature Library</a> — while we discussed a lot, we likely have even more that could help</li><li><a href="https://www.teamtailor.com/ai/">List of all AI capabilities</a></li></ul>${pricingSection}<p>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p><p>Best,<br/>[Your name]</p>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const plainBlob = new Blob([html.replace(/<[^>]+>/g, "")], { type: "text/plain" });
+    const item = new ClipboardItem({ "text/html": blob, "text/plain": plainBlob });
+    navigator.clipboard.write([item]);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
-
   const handleFile = (f) => {
     if (f && f.type === "application/pdf") { setFile(f); setError(""); }
     else setError("Please upload a PDF file.");
