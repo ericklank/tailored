@@ -579,7 +579,7 @@ export default function App() {
     try {
       const text = await f.text();
       const articles = JSON.parse(text);
-      const chunkSize = 50;
+      const chunkSize = 10;
       let totalProcessed = 0;
 
       for (let i = 0; i < articles.length; i += chunkSize) {
