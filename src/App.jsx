@@ -5,25 +5,32 @@ const SECTIONS = [
     key: "currentSituation",
     label: "Current Situation",
     color: "#FF2D78",
-    desc: "Where the prospect is today",
+    span: 1,
   },
   {
     key: "positiveOutcomes",
-    label: "Positive Outcomes",
+    label: "Discussed in Call",
     color: "#00C896",
-    desc: "What they stand to gain",
+    span: 1,
+  },
+  {
+    key: "suggestedOutcomes",
+    label: "You Might Have Missed",
+    color: "#FF8C42",
+    span: 1,
+    badge: "💡 AI Suggested",
   },
   {
     key: "objectionsRaised",
     label: "Objections Raised",
-    color: "#FF8C42",
-    desc: "Concerns and blockers",
+    color: "#E0294A",
+    span: 1,
   },
   {
     key: "recommendedNextSteps",
     label: "Recommended Next Steps",
     color: "#6C63FF",
-    desc: "How to move the deal forward",
+    span: 2,
   },
 ];
 
@@ -486,15 +493,16 @@ export default function App() {
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1500,
-          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these four keys: currentSituation, positiveOutcomes, objectionsRaised, recommendedNextSteps.
+          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these five keys: currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps.
 
 Rules:
 - currentSituation: 3-5 bullets describing the prospect's current pain points and situation
-- positiveOutcomes: 3-8 objects, each with two fields: "outcome" (string: "[Feature Name] — [how it solves their specific problem]") and "articleQuery" (string: a short 3-6 word search query to find the most relevant Teamtailor support article for this feature, e.g. "interview kits autofill transcription" or "career page builder"). Only include features actually mentioned or demoed in the call.
+- positiveOutcomes: 3-8 objects for features ACTUALLY DISCUSSED in the call. Each object has: "outcome" (string: "[Feature Name] — [how it solves their specific problem]") and "articleQuery" (string: 3-6 word search query to find the most relevant Teamtailor support article)
+- suggestedOutcomes: 3-5 objects for Teamtailor features NOT discussed in the call but that would clearly benefit this prospect based on their situation, company size, industry, and pain points. Draw on your knowledge of ATS best practices. Each object has: "outcome" (string: "[Feature Name] — [why this would benefit them specifically]") and "articleQuery" (string: 3-6 word search query for the most relevant Teamtailor support article)
 - objectionsRaised: 3-5 bullets of concerns or blockers the prospect raised
 - recommendedNextSteps: 3-5 bullets of concrete next actions to move the deal forward
 
-Each key should contain an array of strings except positiveOutcomes which is an array of objects. No preamble, no markdown, just raw JSON.`,
+Each key should contain an array of strings except positiveOutcomes and suggestedOutcomes which are arrays of objects. No preamble, no markdown, just raw JSON.`,
           messages: [
             {
               role: "user",
@@ -526,28 +534,30 @@ Each key should contain an array of strings except positiveOutcomes which is an 
       const text = data.content[0].text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(text);
 
-      // Fetch a relevant article for each positive outcome
-      const outcomesWithArticles = await Promise.all(
-        (parsed.positiveOutcomes || []).map(async (item) => {
-          try {
-            const searchRes = await fetch("/api/search", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: item.articleQuery || item.outcome || item }),
-            });
-            if (searchRes.ok) {
-              const searchData = await searchRes.json();
-              const topArticle = searchData.articles?.[0] || null;
-              return { ...item, article: topArticle };
-            }
-          } catch {}
-          return item;
-        })
-      );
+      // Fetch articles for both positiveOutcomes and suggestedOutcomes in parallel
+      const fetchArticleForOutcome = async (item) => {
+        try {
+          const searchRes = await fetch("/api/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: item.articleQuery || item.outcome || item }),
+          });
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            return { ...item, article: searchData.articles?.[0] || null };
+          }
+        } catch {}
+        return item;
+      };
 
-      setResults({ ...parsed, positiveOutcomes: outcomesWithArticles });
+      const [outcomesWithArticles, suggestedWithArticles] = await Promise.all([
+        Promise.all((parsed.positiveOutcomes || []).map(fetchArticleForOutcome)),
+        Promise.all((parsed.suggestedOutcomes || []).map(fetchArticleForOutcome)),
+      ]);
 
-      // Also fetch general articles for the sidebar based on objections
+      setResults({ ...parsed, positiveOutcomes: outcomesWithArticles, suggestedOutcomes: suggestedWithArticles });
+
+      // Fetch general articles for sidebar
       try {
         const query = [
           ...(parsed.currentSituation || []),
@@ -748,14 +758,26 @@ Each key should contain an array of strings except positiveOutcomes which is an 
 
               <div className="grid">
                 {SECTIONS.map((s) => (
-                  <div className="section-card" key={s.key}>
+                  <div className="section-card" key={s.key} style={s.span === 2 ? { gridColumn: "1 / -1" } : {}}>
                     <div className="section-header">
                       <div className="section-pip" style={{ background: s.color }} />
                       <span className="section-title">{s.label}</span>
+                      {s.badge && (
+                        <span style={{
+                          marginLeft: "auto",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: s.color,
+                          background: `${s.color}15`,
+                          border: `1px solid ${s.color}40`,
+                          borderRadius: 6,
+                          padding: "2px 8px",
+                        }}>{s.badge}</span>
+                      )}
                     </div>
                     <ul className="section-items">
                       {(results[s.key] || []).map((item, i) => {
-                        if (s.key === "positiveOutcomes" && item.outcome) {
+                        if ((s.key === "positiveOutcomes" || s.key === "suggestedOutcomes") && item.outcome) {
                           return (
                             <li className="section-item" key={i}>
                               {item.outcome}
@@ -770,11 +792,11 @@ Each key should contain an array of strings except positiveOutcomes which is an 
                                     gap: 4,
                                     marginTop: 5,
                                     fontSize: 11,
-                                    color: "var(--pink)",
+                                    color: s.color,
                                     fontWeight: 600,
                                     textDecoration: "none",
-                                    background: "var(--pink-pale)",
-                                    border: "1px solid var(--pink-border)",
+                                    background: `${s.color}10`,
+                                    border: `1px solid ${s.color}30`,
                                     borderRadius: 6,
                                     padding: "3px 8px",
                                   }}
