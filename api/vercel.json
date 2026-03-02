@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/crawl",
+      "schedule": "0 2 * * 1"
+    }
+  ],
+  "functions": {
+    "api/crawl.js": {
+      "maxDuration": 300
+    },
+    "api/search.js": {
+      "maxDuration": 30
+    }
+  }
+}
