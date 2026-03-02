@@ -1,5 +1,3 @@
-// api/search-stories.js - Search customer stories from Pinecone
-
 const PINECONE_HOST = process.env.PINECONE_HOST;
 const PINECONE_API_KEY = process.env.PINECONE_API_KEY;
 
@@ -10,7 +8,7 @@ export default async function handler(req, res) {
   if (!query) return res.status(400).json({ error: "Missing query" });
 
   try {
-    const searchRes = await fetch(`${PINECONE_HOST}/records/namespaces/stories/search`, {
+    const searchRes = await fetch(`${PINECONE_HOST}/records/namespaces/__default__/search`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -18,8 +16,8 @@ export default async function handler(req, res) {
         "X-Pinecone-API-Version": "2025-04",
       },
       body: JSON.stringify({
-        query: { inputs: { text: query }, top_k: 3 },
-        fields: ["title", "url", "text"],
+        query: { inputs: { text: query }, top_k: 10 },
+        fields: ["title", "url", "text", "type"],
       }),
     });
 
@@ -29,8 +27,11 @@ export default async function handler(req, res) {
     }
 
     const data = await searchRes.json();
+
+    // Filter to only customer_story type records
     const stories = (data.result?.hits || [])
-      .filter(h => (h._score || 0) > 0.3)
+      .filter(h => h.fields?.type === "customer_story" && (h._score || 0) > 0.3)
+      .slice(0, 3)
       .map(h => ({
         title: h.fields?.title || "",
         url: h.fields?.url || "",
