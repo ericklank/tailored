@@ -11,6 +11,7 @@
     "api/search-stories.js": { "maxDuration": 30 },
     "api/ingest.js": { "maxDuration": 300 },
     "api/ingest-stories.js": { "maxDuration": 300 },
-    "api/analyze.js": { "maxDuration": 60 }
+    "api/analyze.js": { "maxDuration": 60 },
+    "api/generate-pdf.js": { "maxDuration": 30 }
   }
 }

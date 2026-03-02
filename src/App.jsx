@@ -126,6 +126,9 @@ export default function App() {
   const [importing, setImporting] = useState(false);
   const [importingStories, setImportingStories] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showProposal, setShowProposal] = useState(false);
+  const [proposalData, setProposalData] = useState(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const handleLogin = async () => {
     const res = await fetch("/api/analyze", {
@@ -198,7 +201,28 @@ export default function App() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleFile = (f) => {
+  const downloadPdf = async () => {
+    setGeneratingPdf(true);
+    try {
+      const res = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(proposalData),
+      });
+      if (!res.ok) throw new Error("PDF generation failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `teamtailor-proposal${proposalData.prospectCompany ? `-${proposalData.prospectCompany.toLowerCase().replace(/\s+/g, "-")}` : ""}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("PDF generation failed: " + err.message);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
     if (f && f.type === "application/pdf") { setFile(f); setError(""); }
     else setError("Please upload a PDF file.");
   };
@@ -273,6 +297,20 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
 
       const finalResults = { ...parsed, positiveOutcomes: outcomesWithArticles, suggestedOutcomes: suggestedWithArticles };
       setResults(finalResults);
+
+      // Initialize editable proposal data
+      const allOutcomes = [
+        ...(outcomesWithArticles || []).map(i => i.outcome || i),
+        ...(suggestedWithArticles || []).map(i => i.outcome || i),
+      ];
+      const pricing = getPricingText(parsed.employeeCount);
+      setProposalData({
+        prospectCompany: parsed.prospectCompany || "",
+        prospectName: parsed.prospectName || "",
+        listPrice: pricing?.price || "",
+        outcomes: allOutcomes,
+      });
+      setShowProposal(false);
 
       // Fetch relevant customer stories
       try {
@@ -529,9 +567,97 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                 </div>
               )}
 
-              <button className="reset-btn" onClick={() => { setResults(null); setFile(null); setStories([]); }}>
+              <button className="reset-btn" onClick={() => { setResults(null); setFile(null); setStories([]); setProposalData(null); setShowProposal(false); }}>
                 ← Analyze another call
               </button>
+
+              {/* 1-Pager Proposal */}
+              <div style={{ marginTop: 16, marginBottom: 32 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>📄 1-Pager Proposal</div>
+                    <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Edit before downloading as PDF</div>
+                  </div>
+                  <button
+                    onClick={() => setShowProposal(p => !p)}
+                    style={{
+                      padding: "10px 20px", background: "var(--pink-muted)",
+                      color: "var(--pink)", border: "1.5px solid var(--pink-border)",
+                      borderRadius: 10, fontFamily: "'DM Sans', sans-serif",
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    }}
+                  >
+                    {showProposal ? "Hide Editor" : "Edit & Download"}
+                  </button>
+                </div>
+
+                {showProposal && proposalData && (
+                  <div style={{
+                    background: "var(--surface)", border: "1.5px solid var(--border)",
+                    borderRadius: 14, padding: "28px 32px",
+                  }}>
+                    {/* Company & Price */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Company Name</div>
+                        <input
+                          value={proposalData.prospectCompany}
+                          onChange={e => setProposalData(p => ({ ...p, prospectCompany: e.target.value }))}
+                          style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>List Price</div>
+                        <input
+                          value={proposalData.listPrice}
+                          onChange={e => setProposalData(p => ({ ...p, listPrice: e.target.value }))}
+                          style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Outcomes */}
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>Benefits / Outcomes</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                      {proposalData.outcomes.map((outcome, i) => (
+                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <textarea
+                            value={outcome}
+                            onChange={e => setProposalData(p => {
+                              const outcomes = [...p.outcomes];
+                              outcomes[i] = e.target.value;
+                              return { ...p, outcomes };
+                            })}
+                            rows={2}
+                            style={{ flex: 1, padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: "var(--text)", background: "white", outline: "none", resize: "vertical" }}
+                          />
+                          <button
+                            onClick={() => setProposalData(p => ({ ...p, outcomes: p.outcomes.filter((_, j) => j !== i) }))}
+                            style={{ padding: "8px 10px", background: "none", border: "1.5px solid var(--border)", borderRadius: 8, color: "var(--text-muted)", cursor: "pointer", fontSize: 14, flexShrink: 0 }}
+                          >✕</button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => setProposalData(p => ({ ...p, outcomes: [...p.outcomes, ""] }))}
+                        style={{ alignSelf: "flex-start", padding: "8px 16px", background: "var(--pink-muted)", border: "1.5px solid var(--pink-border)", borderRadius: 8, color: "var(--pink)", fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                      >+ Add Outcome</button>
+                    </div>
+
+                    <button
+                      onClick={downloadPdf}
+                      disabled={generatingPdf}
+                      style={{
+                        width: "100%", padding: "14px", background: generatingPdf ? "var(--surface)" : "linear-gradient(135deg, #FF2D78, #FF6BA8)",
+                        color: generatingPdf ? "var(--text-muted)" : "white", border: "none", borderRadius: 12,
+                        fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 700,
+                        cursor: generatingPdf ? "not-allowed" : "pointer", transition: "all 0.2s",
+                      }}
+                    >
+                      {generatingPdf ? "Generating PDF..." : "⬇ Download PDF"}
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Follow-up Email */}
               <div style={{ marginTop: 16, marginBottom: 60 }}>
