@@ -364,11 +364,13 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
       ];
       const pricing = getPricingText(parsed.employeeCount);
       setProposalData({
-        prospectCompany: parsed.prospectCompany || "",
-        prospectName: parsed.prospectName || "",
-        listPrice: pricing?.price || "",
-        outcomes: allOutcomes,
-        repName: context.repName || "",
+         prospectCompany: parsed.prospectCompany || "",
+  prospectName: parsed.prospectName || "",
+  listPrice: pricing?.price || "",
+  outcomes: allOutcomes,
+  repName: context.repName || "",
+  repEmail: context.repEmail || "",
+  repPhone: context.repPhone || "",
       });
       setShowProposal(false);
 
@@ -564,6 +566,18 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                       value={context.repName} onChange={e => setContext(p => ({ ...p, repName: e.target.value }))}
                       style={{ width: "100%", fontSize: 13 }} />
                   </div>
+                  <div>
+  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Your Email</label>
+  <input className="api-input" placeholder="e.g. eric@teamtailor.com"
+    value={context.repEmail} onChange={e => setContext(p => ({ ...p, repEmail: e.target.value }))}
+    style={{ width: "100%", fontSize: 13 }} />
+</div>
+<div>
+  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Your Phone</label>
+  <input className="api-input" placeholder="e.g. (815) 482-5699"
+    value={context.repPhone} onChange={e => setContext(p => ({ ...p, repPhone: e.target.value }))}
+    style={{ width: "100%", fontSize: 13 }} />
+</div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Prospect's Title / Role</label>
                     <input className="api-input" placeholder="e.g. Head of Talent"
