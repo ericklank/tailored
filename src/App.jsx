@@ -223,6 +223,8 @@ export default function App() {
       setGeneratingPdf(false);
     }
   };
+
+  const handleFile = (f) => {
     if (f && f.type === "application/pdf") { setFile(f); setError(""); }
     else setError("Please upload a PDF file.");
   };
@@ -298,7 +300,6 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
       const finalResults = { ...parsed, positiveOutcomes: outcomesWithArticles, suggestedOutcomes: suggestedWithArticles };
       setResults(finalResults);
 
-      // Initialize editable proposal data
       const allOutcomes = [
         ...(outcomesWithArticles || []).map(i => i.outcome || i),
         ...(suggestedWithArticles || []).map(i => i.outcome || i),
@@ -312,7 +313,6 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
       });
       setShowProposal(false);
 
-      // Fetch relevant customer stories
       try {
         const storyQuery = [
           parsed.prospectCompany || "",
@@ -542,7 +542,6 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                 ))}
               </div>
 
-              {/* Customer Stories Card */}
               {stories.length > 0 && (
                 <div className="section-card" style={{ marginBottom: 24 }}>
                   <div className="section-header">
@@ -571,7 +570,6 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                 ← Analyze another call
               </button>
 
-              {/* 1-Pager Proposal */}
               <div style={{ marginTop: 16, marginBottom: 32 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <div>
@@ -596,7 +594,6 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                     background: "var(--surface)", border: "1.5px solid var(--border)",
                     borderRadius: 14, padding: "28px 32px",
                   }}>
-                    {/* Company & Price */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Company Name</div>
@@ -616,7 +613,6 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                       </div>
                     </div>
 
-                    {/* Outcomes */}
                     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>Benefits / Outcomes</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                       {proposalData.outcomes.map((outcome, i) => (
@@ -659,7 +655,6 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                 )}
               </div>
 
-              {/* Follow-up Email */}
               <div style={{ marginTop: 16, marginBottom: 60 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <div>
