@@ -424,6 +424,36 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
       setImporting(false); e.target.value = "";
     }
   };
+  const analyzePickup = async () => {
+  if (files.length === 0) return;
+  setLoading(true); setError(""); setPickupEmail(null);
+  try {
+    const fileContents = await Promise.all(files.map(async (f) => {
+      const ftype = getFileType(f);
+      if (ftype === "text") { const text = await f.text(); return { type: "text", text: `[File: ${f.name}]\n${text}` }; }
+      const b64 = await toBase64(f);
+      if (ftype === "image") return { type: "image", source: { type: "base64", media_type: f.type, data: b64 } };
+      return { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } };
+    }));
+    const ctxLines = [
+      context.repName && `Rep Name: ${context.repName}`,
+      context.prospectTitle && `Prospect Title: ${context.prospectTitle}`,
+      context.currentAts && `Current ATS: ${context.currentAts}`,
+      context.renewalDate && `Contract Renewal: ${context.renewalDate}`,
+      context.dealNotes && `Deal Notes: ${context.dealNotes}`,
+    ].filter(Boolean).join("\n");
+    const sys = `You are a sales assistant helping a new Teamtailor rep pick up a deal mid-cycle from a colleague who has left. Analyze all provided materials and generate a warm re-introduction email.${ctxLines ? "\n\nContext:\n" + ctxLines : ""}\n\nThe email should:\n- Open with a warm intro of the new rep taking over\n- Summarize your current understanding of where things stand\n- Reference any agreed next steps or open items from the notes\n- If no clear next steps exist, suggest connecting in the next week\n- Be genuine and human, not salesy\n- Sign off with rep name if provided\n- Keep it 150-200 words max\n\nReturn ONLY JSON with keys: prospectName, prospectCompany, subject, body (use real newlines), summary (3-5 strings of what you found — shown to rep only). Raw JSON, no markdown.`;
+    const response = await fetch("/api/analyze", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, system: sys, messages: [{ role: "user", content: [...fileContents, { type: "text", text: "Analyze and generate the re-engagement email." }] }] }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || "API error");
+    const parsed = JSON.parse(data.content[0].text.replace(/```json|```/g, "").trim());
+    setPickupEmail(parsed);
+  } catch (err) { setError(err.message || "Something went wrong."); }
+  finally { setLoading(false); }
+};
 
   const importStories = async (e) => {
     const f = e.target.files[0];
@@ -503,6 +533,48 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
               <div className="loading-sub">This takes about 10–20 seconds</div>
             </div>
           )}
+          {!loading && pickupEmail && (
+  <div className="results">
+    <div className="results-header">
+      <div>
+        <div className="results-title">Re-engagement Email</div>
+        <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>{pickupEmail.prospectName} · {pickupEmail.prospectCompany}</div>
+      </div>
+    </div>
+    <div style={{ background: "#F5F3FF", border: "1.5px solid #DDD6FE", borderRadius: 16, padding: 24, marginBottom: 24 }}>
+      <div className="section-header" style={{ borderBottomColor: "#DDD6FE" }}>
+        <div className="section-pip" style={{ background: "#6C63FF" }} />
+        <span className="section-title" style={{ color: "#5B21B6" }}>What We Found in the Notes</span>
+      </div>
+      <ul className="section-items">
+        {(pickupEmail.summary || []).map((s, i) => <li className="section-item" key={i}>{s}</li>)}
+      </ul>
+    </div>
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>📧 Re-engagement Email</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Ready to send — copy into your email client</div>
+        </div>
+        <button onClick={() => {
+          const html = pickupEmail.body.split("\n").map(l => l ? `<p>${l}</p>` : "<br/>").join("");
+          const blob = new Blob([html], { type: "text/html" });
+          const plain = new Blob([pickupEmail.body], { type: "text/plain" });
+          navigator.clipboard.write([new ClipboardItem({ "text/html": blob, "text/plain": plain })]);
+        }} style={{
+          padding: "10px 20px", background: "#6C63FF", color: "white", border: "none",
+          borderRadius: 10, fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer",
+        }}>Copy to Clipboard</button>
+      </div>
+      <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "28px 32px" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Subject</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>{pickupEmail.subject}</div>
+        <div style={{ fontFamily: "Georgia, serif", fontSize: 14, lineHeight: 1.9, color: "var(--text)", whiteSpace: "pre-line" }}>{pickupEmail.body}</div>
+      </div>
+    </div>
+    <button className="reset-btn" onClick={() => { setPickupEmail(null); setFiles([]); setMode("analyze"); }}>← Start over</button>
+  </div>
+)}
 
           {!loading && !results && !authed && (
             <div style={{ maxWidth: 400, margin: "80px auto", textAlign: "center" }}>
