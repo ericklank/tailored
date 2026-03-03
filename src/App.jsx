@@ -120,12 +120,14 @@ export default function App() {
   const [files, setFiles] = useState([]);
   const [password, setPassword] = useState("");
   const [context, setContext] = useState({
-    repName: "",
-    prospectTitle: "",
-    currentAts: "",
-    renewalDate: "",
-    dealNotes: "",
-  });
+  repName: "",
+  repEmail: "",
+  repPhone: "",
+  prospectTitle: "",
+  currentAts: "",
+  renewalDate: "",
+  dealNotes: "",
+});
   const [authed, setAuthed] = useState(false);
   const [authError, setAuthError] = useState("");
   const [loading, setLoading] = useState(false);
