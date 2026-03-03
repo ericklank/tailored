@@ -10,7 +10,7 @@ const WHITE = "#FFFFFF";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { prospectCompany, listPrice, outcomes } = req.body;
+  const { prospectCompany, listPrice, outcomes, repName } = req.body;
   const items = (outcomes || []).filter(o => o.trim().length > 0);
 
   try {
