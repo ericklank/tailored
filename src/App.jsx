@@ -117,8 +117,15 @@ const styles = `
 `;
 
 export default function App() {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [password, setPassword] = useState("");
+  const [context, setContext] = useState({
+    repName: "",
+    prospectTitle: "",
+    currentAts: "",
+    renewalDate: "",
+    dealNotes: "",
+  });
   const [authed, setAuthed] = useState(false);
   const [authError, setAuthError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -195,7 +202,8 @@ export default function App() {
       ? `<p><strong>Pricing</strong></p><p>Teamtailor's pricing is based on headcount. With ${results.employeeCount} employees, you fall in the ${pricing.tier} employee range at ${pricing.price}/year. Implementation typically takes 30–60 days and you'll have a dedicated Customer Success Manager to support you throughout.</p>`
       : "";
 
-    const html = `<p>Hi ${name},</p><p>It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.</p><p><strong>Positive Outcomes with Teamtailor</strong></p><ul>${outcomeItems}</ul>${storiesSection}<p><strong>Other Resources</strong></p><ul><li><a href="https://www.youtube.com/@teamtailor">Teamtailor How-to Video Library</a> — a great overview of different capabilities</li><li><a href="https://www.teamtailor.com/features/">Feature Library</a> — while we discussed a lot, we likely have even more that could help</li><li><a href="https://www.teamtailor.com/ai/">List of all AI capabilities</a></li></ul>${pricingSection}<p>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p><p>Best,<br/>[Your name]</p>`;
+    const signOff = context.repName || "[Your name]";
+    const html = `<p>Hi ${name},</p><p>It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.</p><p><strong>Positive Outcomes with Teamtailor</strong></p><ul>${outcomeItems}</ul>${storiesSection}<p><strong>Other Resources</strong></p><ul><li><a href="https://www.youtube.com/@teamtailor">Teamtailor How-to Video Library</a> — a great overview of different capabilities</li><li><a href="https://www.teamtailor.com/features/">Feature Library</a> — while we discussed a lot, we likely have even more that could help</li><li><a href="https://www.teamtailor.com/ai/">List of all AI capabilities</a></li></ul>${pricingSection}<p>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p><p>Best,<br/>${signOff}</p>`;
 
     const blob = new Blob([html], { type: "text/html" });
     const plainBlob = new Blob([html.replace(/<[^>]+>/g, "")], { type: "text/plain" });
@@ -228,13 +236,22 @@ export default function App() {
     }
   };
 
-  const handleFile = (f) => {
-    if (f && f.type === "application/pdf") { setFile(f); setError(""); }
-    else setError("Please upload a PDF file.");
+  const ACCEPTED = ["application/pdf","image/png","image/jpeg","image/jpg","image/webp","text/csv","text/plain","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
+
+  const addFiles = (incoming) => {
+    const valid = Array.from(incoming).filter(f => ACCEPTED.includes(f.type) || f.name.match(/\.(pdf|png|jpg|jpeg|webp|csv|txt|xlsx|xls)$/i));
+    if (valid.length === 0) { setError("Unsupported file type."); return; }
+    setError("");
+    setFiles(prev => {
+      const names = new Set(prev.map(f => f.name));
+      return [...prev, ...valid.filter(f => !names.has(f.name))];
+    });
   };
 
+  const removeFile = (name) => setFiles(prev => prev.filter(f => f.name !== name));
+
   const handleDrop = useCallback((e) => {
-    e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]);
+    e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files);
   }, []);
 
   const toBase64 = (f) => new Promise((res, rej) => {
@@ -244,18 +261,44 @@ export default function App() {
     r.readAsDataURL(f);
   });
 
+  const getFileType = (f) => {
+    if (f.type === "application/pdf") return "document";
+    if (f.type.startsWith("image/")) return "image";
+    return "text";
+  };
+
   const analyze = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     setLoading(true); setError(""); setResults(null); setStories([]);
     try {
-      const base64 = await toBase64(file);
+      const fileContents = await Promise.all(files.map(async (f) => {
+        const ftype = getFileType(f);
+        if (ftype === "text") {
+          const text = await f.text();
+          return { type: "text", text: `[File: ${f.name}]\n${text}` };
+        }
+        const b64 = await toBase64(f);
+        if (ftype === "image") {
+          return { type: "image", source: { type: "base64", media_type: f.type, data: b64 } };
+        }
+        return { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } };
+      }));
+
+      const contextLines = [
+        context.repName && `Rep Name: ${context.repName}`,
+        context.prospectTitle && `Prospect Title/Role: ${context.prospectTitle}`,
+        context.currentAts && `Current ATS/Recruiting Tool: ${context.currentAts}`,
+        context.renewalDate && `Current Contract Renewal Date: ${context.renewalDate}`,
+        context.dealNotes && `Additional Deal Notes: ${context.dealNotes}`,
+      ].filter(Boolean).join("\n");
+
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           password,
-          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these nine keys: prospectName, prospectCompany, employeeCount, currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps, coachingNotes.
-
+          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. You will be given one or more files — these may include call transcripts, meeting notes, screenshots, CSVs of candidate data, job descriptions, org charts, or other supporting materials. Analyze everything provided and return ONLY a JSON object with exactly these nine keys: prospectName, prospectCompany, employeeCount, currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps, coachingNotes.
+${contextLines ? `\nContext provided by the rep:\n${contextLines}\n` : ""}
 Rules:
 - prospectName: string, first name of the prospect (person being sold to, not the sales rep)
 - prospectCompany: string, name of the prospect's company
@@ -266,23 +309,25 @@ Rules:
 - objectionsRaised: 3-5 bullets of concerns or blockers raised
 - recommendedNextSteps: 3-5 bullets of concrete next actions
 - coachingNotes: 4-7 coaching bullets for the sales rep. Each bullet should be ONE of these types, labeled with a prefix:
-  * "❓ Missed Question: [question you should have asked but didn't — e.g. about budget, timeline, decision process, current ATS contract end date, who else is involved in the decision]"
-  * "⚠️ Product Gap: [Teamtailor limitation or gap relevant to what this prospect needs — be honest about where competitors may be stronger]"
-  * "🔍 Clarify: [something the prospect said that was vague or unclear and needs follow-up to properly qualify]"
-  * "💡 Selling Tip: [a specific angle or talking point you could have used more effectively in this call]"
-  * "🏆 Competitive Risk: [if a competitor was mentioned or implied, note the risk and how to counter it]"
-  Mix the types based on what's most relevant to this specific call. Be direct and actionable — this is private coaching feedback for the rep.
+  * "❓ Missed Question: [question you should have asked but didn't]"
+  * "⚠️ Product Gap: [honest Teamtailor limitation relevant to this prospect]"
+  * "🔍 Clarify: [something vague that needs follow-up]"
+  * "💡 Selling Tip: [a better angle you could have used]"
+  * "🏆 Competitive Risk: [competitor mentioned or implied, and how to counter]"
+  ${context.currentAts ? `The rep noted the prospect currently uses ${context.currentAts} — factor this heavily into competitive coaching notes.` : ""}
+  ${context.renewalDate ? `The prospect's current contract renews ${context.renewalDate} — use this for timing urgency in next steps.` : ""}
 
 positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arrays of strings except prospectName/prospectCompany/employeeCount which are primitives. No preamble, no markdown, just raw JSON.`,
           messages: [{
             role: "user",
             content: [
-              { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-              { type: "text", text: "Analyze this sales call transcript and return the JSON summary." },
+              ...fileContents,
+              { type: "text", text: "Analyze all provided materials and return the JSON summary." },
             ],
           }],
         }),
       });
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.message || "API error");
       const text = data.content[0].text.replace(/```json|```/g, "").trim();
@@ -321,14 +366,12 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
         prospectName: parsed.prospectName || "",
         listPrice: pricing?.price || "",
         outcomes: allOutcomes,
+        repName: context.repName || "",
       });
       setShowProposal(false);
 
       try {
-        const storyQuery = [
-          parsed.prospectCompany || "",
-          ...(parsed.currentSituation || []).slice(0, 2),
-        ].join(" ");
+        const storyQuery = [parsed.prospectCompany || "", ...(parsed.currentSituation || []).slice(0, 2)].join(" ");
         const storyRes = await fetch("/api/search-stories", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -476,26 +519,78 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
           {!loading && !results && authed && (
             <>
               <div className="page-title">Analyze a call</div>
-              <div className="page-sub">Upload a transcript PDF and get an instant structured breakdown.</div>
+              <div className="page-sub">Upload any combination of transcripts, notes, screenshots, or CSVs — then add context to sharpen the output.</div>
+
               <div
                 className={`upload-zone ${dragOver ? "drag-over" : ""}`}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
               >
-                <input type="file" accept=".pdf" className="file-input" onChange={(e) => handleFile(e.target.files[0])} />
-                <div className="upload-icon">📄</div>
-                <div className="upload-title">Drop your transcript here</div>
-                <div className="upload-sub"><strong>PDF format</strong> · Drag & drop or click to browse</div>
+                <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.txt,.xlsx,.xls" multiple className="file-input"
+                  onChange={(e) => addFiles(e.target.files)} />
+                <div className="upload-icon">📎</div>
+                <div className="upload-title">Drop files here</div>
+                <div className="upload-sub"><strong>PDF, images, CSV, TXT</strong> · Multiple files supported</div>
               </div>
-              {file && (
-                <div className="file-selected">
-                  <span className="file-name">📄 {file.name}</span>
-                  <span className="file-size">{(file.size / 1024).toFixed(0)} KB</span>
+
+              {files.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                  {files.map((f) => {
+                    const icon = f.type.startsWith("image/") ? "🖼️" : f.type === "application/pdf" ? "📄" : "📊";
+                    return (
+                      <div key={f.name} className="file-selected" style={{ marginBottom: 0 }}>
+                        <span className="file-name">{icon} {f.name}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <span className="file-size">{(f.size / 1024).toFixed(0)} KB</span>
+                          <button onClick={() => removeFile(f.name)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 16, lineHeight: 1 }}>✕</button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+
+              <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 24px", marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 16 }}>
+                  Context & Deal Info <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional — improves output)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Your Name</label>
+                    <input className="api-input" placeholder="e.g. Eric Klank"
+                      value={context.repName} onChange={e => setContext(p => ({ ...p, repName: e.target.value }))}
+                      style={{ width: "100%", fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Prospect's Title / Role</label>
+                    <input className="api-input" placeholder="e.g. Head of Talent"
+                      value={context.prospectTitle} onChange={e => setContext(p => ({ ...p, prospectTitle: e.target.value }))}
+                      style={{ width: "100%", fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Current ATS / Recruiting Tool</label>
+                    <input className="api-input" placeholder="e.g. Greenhouse, Lever, Workday"
+                      value={context.currentAts} onChange={e => setContext(p => ({ ...p, currentAts: e.target.value }))}
+                      style={{ width: "100%", fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Contract Renewal / End Date</label>
+                    <input className="api-input" placeholder="e.g. March 2026"
+                      value={context.renewalDate} onChange={e => setContext(p => ({ ...p, renewalDate: e.target.value }))}
+                      style={{ width: "100%", fontSize: 13 }} />
+                  </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>Deal Notes</label>
+                    <textarea className="api-input" placeholder="e.g. Budget ~$15k, CFO approval needed, mentioned Workable as competitor..."
+                      value={context.dealNotes} onChange={e => setContext(p => ({ ...p, dealNotes: e.target.value }))}
+                      rows={2} style={{ width: "100%", fontSize: 13, resize: "vertical" }} />
+                  </div>
+                </div>
+              </div>
+
               {error && <div className="error-box">⚠ {error}</div>}
-              <button className="analyze-btn" disabled={!file} onClick={analyze}>Analyze Transcript</button>
+              <button className="analyze-btn" disabled={files.length === 0} onClick={analyze}>Analyze Transcript</button>
             </>
           )}
 
@@ -510,7 +605,7 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                     </div>
                   )}
                 </div>
-                <div className="results-file">{file?.name}</div>
+                <div className="results-file">{files.map(f => f.name).join(", ")}</div>
               </div>
 
               <div className="grid">
@@ -618,7 +713,7 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                 </div>
               )}
 
-              <button className="reset-btn" onClick={() => { setResults(null); setFile(null); setStories([]); setProposalData(null); setShowProposal(false); }}>
+              <button className="reset-btn" onClick={() => { setResults(null); setFiles([]); setStories([]); setProposalData(null); setShowProposal(false); }}>
                 ← Analyze another call
               </button>
 
@@ -628,40 +723,29 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                     <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>📄 1-Pager Proposal</div>
                     <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Edit before downloading as PDF</div>
                   </div>
-                  <button
-                    onClick={() => setShowProposal(p => !p)}
-                    style={{
-                      padding: "10px 20px", background: "var(--pink-muted)",
-                      color: "var(--pink)", border: "1.5px solid var(--pink-border)",
-                      borderRadius: 10, fontFamily: "'DM Sans', sans-serif",
-                      fontSize: 13, fontWeight: 700, cursor: "pointer",
-                    }}
-                  >
+                  <button onClick={() => setShowProposal(p => !p)} style={{
+                    padding: "10px 20px", background: "var(--pink-muted)", color: "var(--pink)",
+                    border: "1.5px solid var(--pink-border)", borderRadius: 10,
+                    fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  }}>
                     {showProposal ? "Hide Editor" : "Edit & Download"}
                   </button>
                 </div>
 
                 {showProposal && proposalData && (
-                  <div style={{
-                    background: "var(--surface)", border: "1.5px solid var(--border)",
-                    borderRadius: 14, padding: "28px 32px",
-                  }}>
+                  <div style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "28px 32px" }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Company Name</div>
-                        <input
-                          value={proposalData.prospectCompany}
+                        <input value={proposalData.prospectCompany}
                           onChange={e => setProposalData(p => ({ ...p, prospectCompany: e.target.value }))}
-                          style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
-                        />
+                          style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }} />
                       </div>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>List Price</div>
-                        <input
-                          value={proposalData.listPrice}
+                        <input value={proposalData.listPrice}
                           onChange={e => setProposalData(p => ({ ...p, listPrice: e.target.value }))}
-                          style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
-                        />
+                          style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }} />
                       </div>
                     </div>
 
@@ -669,38 +753,31 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                       {proposalData.outcomes.map((outcome, i) => (
                         <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                          <textarea
-                            value={outcome}
+                          <textarea value={outcome}
                             onChange={e => setProposalData(p => {
                               const outcomes = [...p.outcomes];
                               outcomes[i] = e.target.value;
                               return { ...p, outcomes };
                             })}
                             rows={2}
-                            style={{ flex: 1, padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: "var(--text)", background: "white", outline: "none", resize: "vertical" }}
-                          />
-                          <button
-                            onClick={() => setProposalData(p => ({ ...p, outcomes: p.outcomes.filter((_, j) => j !== i) }))}
-                            style={{ padding: "8px 10px", background: "none", border: "1.5px solid var(--border)", borderRadius: 8, color: "var(--text-muted)", cursor: "pointer", fontSize: 14, flexShrink: 0 }}
-                          >✕</button>
+                            style={{ flex: 1, padding: "8px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: "var(--text)", background: "white", outline: "none", resize: "vertical" }} />
+                          <button onClick={() => setProposalData(p => ({ ...p, outcomes: p.outcomes.filter((_, j) => j !== i) }))}
+                            style={{ padding: "8px 10px", background: "none", border: "1.5px solid var(--border)", borderRadius: 8, color: "var(--text-muted)", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>✕</button>
                         </div>
                       ))}
-                      <button
-                        onClick={() => setProposalData(p => ({ ...p, outcomes: [...p.outcomes, ""] }))}
-                        style={{ alignSelf: "flex-start", padding: "8px 16px", background: "var(--pink-muted)", border: "1.5px solid var(--pink-border)", borderRadius: 8, color: "var(--pink)", fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                      >+ Add Outcome</button>
+                      <button onClick={() => setProposalData(p => ({ ...p, outcomes: [...p.outcomes, ""] }))}
+                        style={{ alignSelf: "flex-start", padding: "8px 16px", background: "var(--pink-muted)", border: "1.5px solid var(--pink-border)", borderRadius: 8, color: "var(--pink)", fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                        + Add Outcome
+                      </button>
                     </div>
 
-                    <button
-                      onClick={downloadPdf}
-                      disabled={generatingPdf}
-                      style={{
-                        width: "100%", padding: "14px", background: generatingPdf ? "var(--surface)" : "linear-gradient(135deg, #FF2D78, #FF6BA8)",
-                        color: generatingPdf ? "var(--text-muted)" : "white", border: "none", borderRadius: 12,
-                        fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 700,
-                        cursor: generatingPdf ? "not-allowed" : "pointer", transition: "all 0.2s",
-                      }}
-                    >
+                    <button onClick={downloadPdf} disabled={generatingPdf} style={{
+                      width: "100%", padding: "14px",
+                      background: generatingPdf ? "var(--surface)" : "linear-gradient(135deg, #FF2D78, #FF6BA8)",
+                      color: generatingPdf ? "var(--text-muted)" : "white", border: "none", borderRadius: 12,
+                      fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 700,
+                      cursor: generatingPdf ? "not-allowed" : "pointer", transition: "all 0.2s",
+                    }}>
                       {generatingPdf ? "Generating PDF..." : "⬇ Download PDF"}
                     </button>
                   </div>
@@ -713,15 +790,12 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                     <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>📧 Follow-up Email</div>
                     <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Ready to send — copy and paste into your email client</div>
                   </div>
-                  <button
-                    onClick={copyEmail}
-                    style={{
-                      padding: "10px 20px", background: copied ? "#00C896" : "var(--pink)",
-                      color: "white", border: "none", borderRadius: 10,
-                      fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 700,
-                      cursor: "pointer", transition: "background 0.2s", whiteSpace: "nowrap",
-                    }}
-                  >
+                  <button onClick={copyEmail} style={{
+                    padding: "10px 20px", background: copied ? "#00C896" : "var(--pink)",
+                    color: "white", border: "none", borderRadius: 10,
+                    fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 700,
+                    cursor: "pointer", transition: "background 0.2s", whiteSpace: "nowrap",
+                  }}>
                     {copied ? "✓ Copied!" : "Copy to Clipboard"}
                   </button>
                 </div>
@@ -795,7 +869,7 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
 
                   <p style={{ margin: "0 0 6px" }}>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p>
                   <p style={{ margin: "0 0 6px" }}>Best,</p>
-                  <p style={{ margin: 0 }}>[Your name]</p>
+                  <p style={{ margin: 0 }}>{context.repName || "[Your name]"}</p>
                 </div>
               </div>
             </div>
