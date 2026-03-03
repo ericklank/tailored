@@ -10,9 +10,7 @@ const WHITE = "#FFFFFF";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { prospectCompany, listPrice, outcomes, repName } = req.body;
-  const items = (outcomes || []).filter(o => o.trim().length > 0);
-
+const { prospectCompany, listPrice, outcomes, repName, repEmail, repPhone } = req.body;  const items = (outcomes || []).filter(o => o.trim().length > 0);
   try {
     const doc = new PDFDocument({ size: "LETTER", margin: 0, autoFirstPage: true });
 
@@ -123,10 +121,10 @@ export default async function handler(req, res) {
     doc.moveTo(LEFT, footerY).lineTo(RIGHT, footerY).strokeColor(BORDER).lineWidth(1).stroke();
     doc.font("Helvetica").fontSize(9).fillColor(GRAY)
       .text("If you have any questions, do let me know.", LEFT, footerY + 10);
-    doc.font("Helvetica-Bold").fontSize(9).fillColor(DARK).text("Eric Klank", LEFT, footerY + 24);
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(DARK).text(repName || "Rep Name", LEFT, footerY + 24);
     doc.font("Helvetica").fontSize(9).fillColor(GRAY).text("Teamtailor — Chicago", LEFT, footerY + 36);
-    doc.font("Helvetica").fontSize(9).fillColor(PINK).text("eric.klank@teamtailor.com", LEFT, footerY + 48);
-    doc.font("Helvetica").fontSize(9).fillColor(PINK).text("(815) 482-5699", LEFT, footerY + 60);
+    doc.font("Helvetica").fontSize(9).fillColor(PINK).text(repEmail || "", LEFT, footerY + 48);
+    doc.font("Helvetica").fontSize(9).fillColor(PINK).text(repPhone || "", LEFT, footerY + 60);
 
     doc.end();
   } catch (err) {
