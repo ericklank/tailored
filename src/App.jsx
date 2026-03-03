@@ -6,6 +6,7 @@ const SECTIONS = [
   { key: "suggestedOutcomes", label: "You Might Have Missed", color: "#FF8C42", span: 1, badge: "💡 AI Suggested" },
   { key: "objectionsRaised", label: "Objections Raised", color: "#E0294A", span: 1 },
   { key: "recommendedNextSteps", label: "Recommended Next Steps", color: "#6C63FF", span: 2 },
+  { key: "coachingNotes", label: "Coaching", color: "#0EA5E9", span: 2, badge: "🎯 Rep Coaching", coaching: true },
 ];
 
 const styles = `
@@ -105,6 +106,9 @@ const styles = `
     font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s; margin-bottom: 40px;
   }
   .reset-btn:hover { border-color: var(--pink); color: var(--pink); }
+  .coaching-card { background: #F0F9FF; border: 1.5px solid #BAE6FD; border-radius: 16px; padding: 24px; }
+  .coaching-item { font-size: 13.5px; line-height: 1.6; color: var(--text); padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; background: white; border: 1px solid #E0F2FE; }
+  .coaching-item:last-child { margin-bottom: 0; }
   @media (max-width: 640px) {
     .grid { grid-template-columns: 1fr; }
     .header { padding: 0 20px; }
@@ -250,7 +254,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           password,
-          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these eight keys: prospectName, prospectCompany, employeeCount, currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps.
+          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these nine keys: prospectName, prospectCompany, employeeCount, currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps, coachingNotes.
 
 Rules:
 - prospectName: string, first name of the prospect (person being sold to, not the sales rep)
@@ -261,6 +265,13 @@ Rules:
 - suggestedOutcomes: 3-5 objects for Teamtailor features NOT discussed but that would clearly benefit this prospect. Each object: "outcome" ("[Feature Name] — [why this would benefit them]") and "articleQuery" (3-6 word search query)
 - objectionsRaised: 3-5 bullets of concerns or blockers raised
 - recommendedNextSteps: 3-5 bullets of concrete next actions
+- coachingNotes: 4-7 coaching bullets for the sales rep. Each bullet should be ONE of these types, labeled with a prefix:
+  * "❓ Missed Question: [question you should have asked but didn't — e.g. about budget, timeline, decision process, current ATS contract end date, who else is involved in the decision]"
+  * "⚠️ Product Gap: [Teamtailor limitation or gap relevant to what this prospect needs — be honest about where competitors may be stronger]"
+  * "🔍 Clarify: [something the prospect said that was vague or unclear and needs follow-up to properly qualify]"
+  * "💡 Selling Tip: [a specific angle or talking point you could have used more effectively in this call]"
+  * "🏆 Competitive Risk: [if a competitor was mentioned or implied, note the risk and how to counter it]"
+  Mix the types based on what's most relevant to this specific call. Be direct and actionable — this is private coaching feedback for the rep.
 
 positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arrays of strings except prospectName/prospectCompany/employeeCount which are primitives. No preamble, no markdown, just raw JSON.`,
           messages: [{
@@ -503,43 +514,84 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
               </div>
 
               <div className="grid">
-                {SECTIONS.map((s) => (
-                  <div className="section-card" key={s.key} style={s.span === 2 ? { gridColumn: "1 / -1" } : {}}>
-                    <div className="section-header">
-                      <div className="section-pip" style={{ background: s.color }} />
-                      <span className="section-title">{s.label}</span>
-                      {s.badge && (
-                        <span style={{
-                          marginLeft: "auto", fontSize: 11, fontWeight: 600, color: s.color,
-                          background: `${s.color}15`, border: `1px solid ${s.color}40`,
-                          borderRadius: 6, padding: "2px 8px",
-                        }}>{s.badge}</span>
-                      )}
+                {SECTIONS.map((s) => {
+                  const items = results[s.key] || [];
+                  if (s.coaching) {
+                    return (
+                      <div className="coaching-card" key={s.key} style={{ gridColumn: "1 / -1" }}>
+                        <div className="section-header" style={{ borderBottomColor: "#BAE6FD" }}>
+                          <div className="section-pip" style={{ background: s.color }} />
+                          <span className="section-title" style={{ color: "#0369A1" }}>{s.label}</span>
+                          <span style={{
+                            marginLeft: "auto", fontSize: 11, fontWeight: 600, color: s.color,
+                            background: `${s.color}15`, border: `1px solid ${s.color}40`,
+                            borderRadius: 6, padding: "2px 8px",
+                          }}>{s.badge}</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          {items.map((item, i) => {
+                            const text = typeof item === "string" ? item : item.outcome || "";
+                            const typeColors = {
+                              "❓": { bg: "#FFF7ED", border: "#FED7AA", label: "#C2410C" },
+                              "⚠️": { bg: "#FFF1F2", border: "#FECDD3", label: "#BE123C" },
+                              "🔍": { bg: "#F0FDF4", border: "#BBF7D0", label: "#15803D" },
+                              "💡": { bg: "#FEFCE8", border: "#FEF08A", label: "#A16207" },
+                              "🏆": { bg: "#F5F3FF", border: "#DDD6FE", label: "#6D28D9" },
+                            };
+                            const emoji = Object.keys(typeColors).find(e => text.startsWith(e));
+                            const colors = emoji ? typeColors[emoji] : { bg: "#F0F9FF", border: "#BAE6FD", label: "#0369A1" };
+                            const colonIdx = text.indexOf(": ");
+                            const label = colonIdx > -1 ? text.slice(0, colonIdx + 1) : "";
+                            const body = colonIdx > -1 ? text.slice(colonIdx + 2) : text;
+                            return (
+                              <div key={i} className="coaching-item" style={{ background: colors.bg, borderColor: colors.border }}>
+                                {label && <span style={{ fontWeight: 700, color: colors.label, display: "block", marginBottom: 3, fontSize: 11 }}>{label}</span>}
+                                <span style={{ fontSize: 13 }}>{body}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="section-card" key={s.key} style={s.span === 2 ? { gridColumn: "1 / -1" } : {}}>
+                      <div className="section-header">
+                        <div className="section-pip" style={{ background: s.color }} />
+                        <span className="section-title">{s.label}</span>
+                        {s.badge && (
+                          <span style={{
+                            marginLeft: "auto", fontSize: 11, fontWeight: 600, color: s.color,
+                            background: `${s.color}15`, border: `1px solid ${s.color}40`,
+                            borderRadius: 6, padding: "2px 8px",
+                          }}>{s.badge}</span>
+                        )}
+                      </div>
+                      <ul className="section-items">
+                        {items.map((item, i) => {
+                          if ((s.key === "positiveOutcomes" || s.key === "suggestedOutcomes") && item.outcome) {
+                            return (
+                              <li className="section-item" key={i}>
+                                {item.outcome}
+                                {item.article && (
+                                  <a href={item.article.url} target="_blank" rel="noopener noreferrer" style={{
+                                    display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11,
+                                    color: s.color, fontWeight: 600, textDecoration: "none",
+                                    background: `${s.color}10`, border: `1px solid ${s.color}30`,
+                                    borderRadius: 6, padding: "3px 8px",
+                                  }}>
+                                    📄 {item.article.title}
+                                  </a>
+                                )}
+                              </li>
+                            );
+                          }
+                          return <li className="section-item" key={i}>{typeof item === "string" ? item : item.outcome}</li>;
+                        })}
+                      </ul>
                     </div>
-                    <ul className="section-items">
-                      {(results[s.key] || []).map((item, i) => {
-                        if ((s.key === "positiveOutcomes" || s.key === "suggestedOutcomes") && item.outcome) {
-                          return (
-                            <li className="section-item" key={i}>
-                              {item.outcome}
-                              {item.article && (
-                                <a href={item.article.url} target="_blank" rel="noopener noreferrer" style={{
-                                  display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11,
-                                  color: s.color, fontWeight: 600, textDecoration: "none",
-                                  background: `${s.color}10`, border: `1px solid ${s.color}30`,
-                                  borderRadius: 6, padding: "3px 8px",
-                                }}>
-                                  📄 {item.article.title}
-                                </a>
-                              )}
-                            </li>
-                          );
-                        }
-                        return <li className="section-item" key={i}>{typeof item === "string" ? item : item.outcome}</li>;
-                      })}
-                    </ul>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {stories.length > 0 && (
