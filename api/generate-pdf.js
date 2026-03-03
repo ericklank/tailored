@@ -10,95 +10,96 @@ const WHITE = "#FFFFFF";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { prospectCompany, prospectName, listPrice, outcomes } = req.body;
+  const { prospectCompany, listPrice, outcomes } = req.body;
   const items = (outcomes || []).filter(o => o.trim().length > 0);
 
   try {
-    const doc = new PDFDocument({ size: "LETTER", margin: 43 });
+    const doc = new PDFDocument({ size: "LETTER", margin: 0, autoFirstPage: true });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="teamtailor-proposal${prospectCompany ? `-${prospectCompany.toLowerCase().replace(/\s+/g, "-")}` : ""}.pdf"`);
 
     doc.pipe(res);
 
-    const PAGE_HEIGHT = 792;
-    const PAGE_WIDTH = 612;
+    const PAGE_H = 792;
+    const PAGE_W = 612;
     const LEFT = 43;
-    const RIGHT = PAGE_WIDTH - 43;
-    const CONTENT_WIDTH = RIGHT - LEFT;
+    const RIGHT = PAGE_W - 43;
+    const CW = RIGHT - LEFT;
 
     const HEADER_H = 60;
-    const TABLE_HEADER_H = 30;
+    const GAP1 = 16;
+    const TABLE_HDR_H = 30;
     const TABLE_ROW_H = 34;
-    const SECTION_TITLE_H = 36;
-    const DIVIDER_H = 14;
-    const FOOTER_H = 90;
-    const GAP_AFTER_TABLE = 16;
+    const GAP2 = 18;
+    const BENEFITS_TITLE_H = 20;
+    const GAP3 = 18;
+    const FOOTER_H = 88;
+    const FOOTER_TOP_GAP = 16;
 
-    const fixedUsed = HEADER_H + GAP_AFTER_TABLE + TABLE_HEADER_H + TABLE_ROW_H + SECTION_TITLE_H + DIVIDER_H + FOOTER_H;
-    const availableForOutcomes = PAGE_HEIGHT - fixedUsed - 20;
+    const fixedH = HEADER_H + GAP1 + TABLE_HDR_H + TABLE_ROW_H + GAP2 + BENEFITS_TITLE_H + GAP3 + FOOTER_TOP_GAP + FOOTER_H;
+    const availableH = PAGE_H - fixedH;
 
-    const count = items.length || 1;
-    let fontSize = 11;
-    const lineHeight = 1.6;
+    let chosenFs = 10;
+    let chosenGap = 8;
 
-    for (let fs = 13; fs >= 8; fs -= 0.5) {
-      const charsPerLine = Math.floor(CONTENT_WIDTH / (fs * 0.52));
-      const totalLines = items.reduce((acc, o) => acc + Math.ceil(o.length / charsPerLine), 0);
-      const totalH = totalLines * (fs * lineHeight) + count * 8;
-      if (totalH <= availableForOutcomes) {
-        fontSize = fs;
+    for (let fs = 13; fs >= 7.5; fs -= 0.25) {
+      const lh = fs * 1.5;
+      const cpl = Math.floor(CW / (fs * 0.52));
+      const totalLines = items.reduce((acc, o) => acc + Math.ceil(o.length / cpl), 0);
+      const textH = totalLines * lh;
+      const leftover = availableH - textH;
+      const gap = leftover / items.length;
+      if (gap >= 6 && gap <= 20) {
+        chosenFs = fs;
+        chosenGap = gap;
+        break;
+      }
+      if (gap > 20 && fs <= 7.5) {
+        chosenFs = fs;
+        chosenGap = Math.min(20, gap);
         break;
       }
     }
 
-    const charsPerLine = Math.floor(CONTENT_WIDTH / (fontSize * 0.52));
-    const totalLines = items.reduce((acc, o) => acc + Math.ceil(o.length / charsPerLine), 0);
-    const textBlockH = totalLines * (fontSize * lineHeight);
-    const remainingSpace = availableForOutcomes - textBlockH;
-    const itemGap = Math.min(14, Math.max(4, remainingSpace / count));
-
     // ── HEADER ──────────────────────────────────────────────
-    doc.rect(0, 0, PAGE_WIDTH, HEADER_H).fill(PINK);
-    doc.font("Helvetica-Bold").fontSize(22).fillColor(WHITE)
-      .text("Teamtailor", LEFT, 17);
+    doc.rect(0, 0, PAGE_W, HEADER_H).fill(PINK);
+    doc.font("Helvetica-Bold").fontSize(22).fillColor(WHITE).text("Teamtailor", LEFT, 17);
     const headerRight = prospectCompany ? `${prospectCompany} — Teamtailor Proposal` : "Teamtailor Proposal";
     doc.font("Helvetica-Bold").fontSize(13).fillColor(WHITE)
-      .text(headerRight, LEFT, 22, { align: "right", width: CONTENT_WIDTH });
+      .text(headerRight, LEFT, 22, { align: "right", width: CW });
 
-    doc.y = HEADER_H + GAP_AFTER_TABLE;
+    let y = HEADER_H + GAP1;
 
     // ── PRICING TABLE ────────────────────────────────────────
-    const tableTop = doc.y;
-    const col1W = CONTENT_WIDTH * 0.65;
-    const col2W = CONTENT_WIDTH * 0.35;
+    const col1W = CW * 0.65;
+    const col2W = CW * 0.35;
 
-    doc.rect(LEFT, tableTop, CONTENT_WIDTH, TABLE_HEADER_H).fill(PINK);
+    doc.rect(LEFT, y, CW, TABLE_HDR_H).fill(PINK);
     doc.font("Helvetica-Bold").fontSize(10).fillColor(WHITE)
-      .text("Product", LEFT + 10, tableTop + 10, { width: col1W });
+      .text("Product", LEFT + 10, y + 10, { width: col1W });
     doc.font("Helvetica-Bold").fontSize(10).fillColor(WHITE)
-      .text("Annual Recurring Fees", LEFT + col1W, tableTop + 10, { width: col2W - 10, align: "right" });
+      .text("Annual Recurring Fees", LEFT + col1W, y + 10, { width: col2W - 10, align: "right" });
 
-    const atsTop = tableTop + TABLE_HEADER_H;
-    doc.rect(LEFT, atsTop, CONTENT_WIDTH, TABLE_ROW_H).fill(PINK_PALE);
+    y += TABLE_HDR_H;
+    doc.rect(LEFT, y, CW, TABLE_ROW_H).fill(PINK_PALE);
     doc.font("Helvetica-Bold").fontSize(10).fillColor(DARK)
-      .text("Applicant Tracking System", LEFT + 10, atsTop + 12, { width: col1W });
+      .text("Applicant Tracking System", LEFT + 10, y + 12, { width: col1W });
     if (listPrice) {
       doc.font("Helvetica-Bold").fontSize(10).fillColor(DARK)
-        .text(listPrice, LEFT + col1W, atsTop + 12, { width: col2W - 10, align: "right" });
+        .text(listPrice, LEFT + col1W, y + 12, { width: col2W - 10, align: "right" });
     }
 
-    doc.y = atsTop + TABLE_ROW_H + 18;
+    y += TABLE_ROW_H + GAP2;
 
-    // ── BENEFITS TITLE ────────────────────────────────────────
+    // ── BENEFITS TITLE + DIVIDER ──────────────────────────────
     const benefitsTitle = prospectCompany
       ? `Benefits ${prospectCompany} will unlock with Teamtailor`
       : "Benefits you will unlock with Teamtailor";
-    doc.font("Helvetica-Bold").fontSize(13).fillColor(DARK)
-      .text(benefitsTitle, LEFT, doc.y, { width: CONTENT_WIDTH });
-    doc.y += 8;
-    doc.moveTo(LEFT, doc.y).lineTo(RIGHT, doc.y).strokeColor(BORDER).lineWidth(1).stroke();
-    doc.y += 10;
+    doc.font("Helvetica-Bold").fontSize(13).fillColor(DARK).text(benefitsTitle, LEFT, y, { width: CW });
+    y += BENEFITS_TITLE_H;
+    doc.moveTo(LEFT, y).lineTo(RIGHT, y).strokeColor(BORDER).lineWidth(1).stroke();
+    y += 8;
 
     // ── OUTCOMES ─────────────────────────────────────────────
     for (const outcome of items) {
@@ -106,20 +107,19 @@ export default async function handler(req, res) {
       const feature = dash > -1 ? outcome.slice(0, dash) : outcome;
       const desc = dash > -1 ? outcome.slice(dash) : "";
 
-      const bulletY = doc.y;
-      doc.circle(LEFT + 4, bulletY + fontSize * 0.45, 3).fill(PINK);
+      doc.circle(LEFT + 4, y + chosenFs * 0.5, 3).fill(PINK);
 
-      doc.font("Helvetica-Bold").fontSize(fontSize).fillColor(PINK)
-        .text(feature, LEFT + 12, bulletY, { continued: desc.length > 0, width: CONTENT_WIDTH - 12 });
+      doc.font("Helvetica-Bold").fontSize(chosenFs).fillColor(PINK)
+        .text(feature, LEFT + 12, y, { continued: desc.length > 0, width: CW - 12 });
       if (desc) {
-        doc.font("Helvetica").fontSize(fontSize).fillColor(DARK)
-          .text(desc, { width: CONTENT_WIDTH - 12 });
+        doc.font("Helvetica").fontSize(chosenFs).fillColor(DARK)
+          .text(desc, { width: CW - 12 });
       }
-      doc.y += itemGap;
+      y = doc.y + chosenGap;
     }
 
-    // ── FOOTER (pinned to bottom) ─────────────────────────────
-    const footerY = PAGE_HEIGHT - FOOTER_H + 5;
+    // ── FOOTER (absolutely pinned to bottom) ──────────────────
+    const footerY = PAGE_H - FOOTER_H;
     doc.moveTo(LEFT, footerY).lineTo(RIGHT, footerY).strokeColor(BORDER).lineWidth(1).stroke();
     doc.font("Helvetica").fontSize(9).fillColor(GRAY)
       .text("If you have any questions, do let me know.", LEFT, footerY + 10);
