@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 const SECTIONS = [
   { key: "currentSituation", label: "Current Situation", color: "#FF2D78", span: 1 },
@@ -143,6 +143,7 @@ export default function App() {
   const [shareUrl, setShareUrl] = useState("");
   const [sharing, setSharing] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [isSharedView, setIsSharedView] = useState(false);
 
   // Rep info fields
   const [repName, setRepName] = useState("");
@@ -156,6 +157,28 @@ export default function App() {
   const [openEmail, setOpenEmail] = useState(false);
 
   const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // On mount: check if this is a shared report URL
+  useEffect(() => {
+    const match = window.location.pathname.match(/^\/report\/([a-f0-9]+)$/);
+    if (match) {
+      const id = match[1];
+      setLoading(true);
+      fetch(`/api/get-report?id=${id}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) { setError("Report not found or expired."); return; }
+          const r = data.results || data;
+          setResults(r);
+          setStories(data.stories || []);
+          setProposalData(data.proposalData || null);
+          setAuthed(true);
+          setIsSharedView(true);
+        })
+        .catch(() => setError("Failed to load shared report."))
+        .finally(() => setLoading(false));
+    }
+  }, []);
 
   const handleLogin = async () => {
     const res = await fetch("/api/analyze", {
@@ -544,8 +567,8 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
               <input type="file" accept=".json" style={{ display: "none" }} onChange={importArticles} disabled={importing} />
             </label>
 
-            {/* Analyze another call — only shown when viewing results */}
-            {results && (
+            {/* Analyze another call — only shown when viewing results, not in shared view */}
+            {results && !isSharedView && (
               <button
                 className="reset-btn"
                 onClick={() => { setResults(null); setFile(null); setStories([]); setProposalData(null); setShowProposal(false); setShareUrl(""); setOpenSections({}); }}
@@ -554,8 +577,8 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
               </button>
             )}
 
-            {/* Share Report — only shown when viewing results */}
-            {results && (
+            {/* Share Report — only shown when viewing results, not already in shared view */}
+            {results && !isSharedView && (
               <button
                 onClick={shareReport}
                 disabled={sharing}
