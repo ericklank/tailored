@@ -144,6 +144,11 @@ export default function App() {
   const [sharing, setSharing] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
+  // Rep info fields
+  const [repName, setRepName] = useState("");
+  const [repEmail, setRepEmail] = useState("");
+  const [repPhone, setRepPhone] = useState("");
+
   // All sections collapsed by default
   const [openSections, setOpenSections] = useState({});
   const [openStories, setOpenStories] = useState(false);
@@ -266,7 +271,9 @@ export default function App() {
       ? `<p><strong>Pricing</strong></p><p>Teamtailor's pricing is based on headcount. With ${results.employeeCount} employees, you fall in the ${pricing.tier} employee range at ${pricing.price}/year. Implementation typically takes 30–60 days and you'll have a dedicated Customer Success Manager to support you throughout.</p>`
       : "";
 
-    const html = `<p>Hi ${name},</p><p>It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.</p>${metricsSection}<p><strong>Positive Outcomes with Teamtailor</strong></p><ul>${outcomeItems}</ul>${storiesSection}<p><strong>Other Resources</strong></p><ul><li><a href="https://www.youtube.com/@teamtailor">Teamtailor How-to Video Library</a> — a great overview of different capabilities</li><li><a href="https://www.teamtailor.com/features/">Feature Library</a> — while we discussed a lot, we likely have even more that could help</li><li><a href="https://www.teamtailor.com/ai/">List of all AI capabilities</a></li></ul>${pricingSection}<p>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p><p>Best,<br/>[Your name]</p>`;
+    const signOff = `<p>Best,</p><p>${repName || "[Your name]"}${repEmail ? `<br/>${repEmail}` : ""}${repPhone ? `<br/>${repPhone}` : ""}</p>`;
+
+    const html = `<p>Hi ${name},</p><p>It was great to connect with you today! You can review our call recording and below you'll find a collection of notes and resources based on our chat.</p>${metricsSection}<p><strong>Positive Outcomes with Teamtailor</strong></p><ul>${outcomeItems}</ul>${storiesSection}<p><strong>Other Resources</strong></p><ul><li><a href="https://www.youtube.com/@teamtailor">Teamtailor How-to Video Library</a> — a great overview of different capabilities</li><li><a href="https://www.teamtailor.com/features/">Feature Library</a> — while we discussed a lot, we likely have even more that could help</li><li><a href="https://www.teamtailor.com/ai/">List of all AI capabilities</a></li></ul>${pricingSection}<p>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p>${signOff}`;
 
     const blob = new Blob([html], { type: "text/html" });
     const plainBlob = new Blob([html.replace(/<[^>]+>/g, "")], { type: "text/plain" });
@@ -408,6 +415,9 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
         prospectName: parsed.prospectName || "",
         listPrice: pricing?.price || "",
         outcomes: allOutcomes,
+        repName: repName,
+        repEmail: repEmail,
+        repPhone: repPhone,
       });
       setShowProposal(false);
 
@@ -613,6 +623,40 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                   <span className="file-size">{(file.size / 1024).toFixed(0)} KB</span>
                 </div>
               )}
+
+              {/* Rep info fields */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Your Name</div>
+                  <input
+                    className="api-input"
+                    placeholder="e.g. Sarah Jones"
+                    value={repName}
+                    onChange={e => setRepName(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Your Email</div>
+                  <input
+                    className="api-input"
+                    placeholder="e.g. sarah@teamtailor.com"
+                    value={repEmail}
+                    onChange={e => setRepEmail(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Your Phone</div>
+                  <input
+                    className="api-input"
+                    placeholder="e.g. +1 555 000 0000"
+                    value={repPhone}
+                    onChange={e => setRepPhone(e.target.value)}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
               {error && <div className="error-box">⚠ {error}</div>}
               <button className="analyze-btn" disabled={!file} onClick={analyze}>Analyze Transcript</button>
             </>
@@ -737,6 +781,32 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                           <input
                             value={proposalData.listPrice}
                             onChange={e => setProposalData(p => ({ ...p, listPrice: e.target.value }))}
+                            style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Rep Name</div>
+                          <input
+                            value={proposalData.repName || ""}
+                            onChange={e => setProposalData(p => ({ ...p, repName: e.target.value }))}
+                            style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Rep Email</div>
+                          <input
+                            value={proposalData.repEmail || ""}
+                            onChange={e => setProposalData(p => ({ ...p, repEmail: e.target.value }))}
+                            style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 6 }}>Rep Phone</div>
+                          <input
+                            value={proposalData.repPhone || ""}
+                            onChange={e => setProposalData(p => ({ ...p, repPhone: e.target.value }))}
                             style={{ width: "100%", padding: "10px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "var(--text)", background: "white", outline: "none" }}
                           />
                         </div>
@@ -892,7 +962,9 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
 
                       <p style={{ margin: "0 0 6px" }}>Let me know if you have any questions, thoughts, or feedback. Happy to keep discussing and find the best path forward.</p>
                       <p style={{ margin: "0 0 6px" }}>Best,</p>
-                      <p style={{ margin: 0 }}>[Your name]</p>
+                      <p style={{ margin: 0 }}>{repName || "[Your name]"}</p>
+                      {repEmail && <p style={{ margin: 0 }}>{repEmail}</p>}
+                      {repPhone && <p style={{ margin: 0 }}>{repPhone}</p>}
                     </div>
                   </div>
                 )}
