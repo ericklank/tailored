@@ -124,6 +124,62 @@ const styles = `
   }
 `;
 
+// SF Coaching widget — identifies gaps and suggests questions
+function SFCoachingWidget({ sfData, repName, results }) {
+  const [open, setOpen] = useState(false);
+
+  const rep = repName || "The rep";
+  const placeholder = (val) => val && val.includes("needs to address");
+
+  const gaps = [
+    { key: "economicBuyer", field: "Economic Buyer", question: "Who ultimately signs off on budget decisions — is there someone above you involved in this?" },
+    { key: "decisionCriteria", field: "Decision Criteria", question: "What does success look like for you? What criteria matter most when choosing a platform?" },
+    { key: "decisionProcess", field: "Decision Process", question: "What does your evaluation and approval process look like from here?" },
+    { key: "metrics", field: "Metrics", question: "How are you currently measuring recruiting performance — time to hire, cost per hire, applicant volume?" },
+    { key: "competition", field: "Competition", question: "Are you evaluating any other platforms alongside Teamtailor?" },
+    { key: "champion", field: "Champion", question: "Who internally is most excited about solving this — who would be your advocate for this project?" },
+    { key: "timeline", field: "Timeline", question: "When are you hoping to have something in place? Is there a hard deadline driving this?" },
+    { key: "atsProvider", field: "ATS Provider", question: "What are you currently using to manage recruiting and applications?" },
+    { key: "atsRenewalDate", field: "ATS Renewal Date", question: "When does your current contract renew — is there a window we should be working toward?" },
+    { key: "opportunityHRProvider", field: "HR Provider", question: "What HRIS system are you running today? Any integrations we'd need to consider?" },
+  ].filter(g => placeholder(sfData[g.key]));
+
+  if (gaps.length === 0) return null;
+
+  return (
+    <div className="section-card" style={{ marginBottom: 60 }}>
+      <div className="section-card-header" onClick={() => setOpen(v => !v)}>
+        <div className="section-pip" style={{ background: "#F59E0B" }} />
+        <span className="section-title">SF Coaching</span>
+        <span style={{
+          fontSize: 11, fontWeight: 600, color: "#F59E0B",
+          background: "#F59E0B15", border: "1px solid #F59E0B40",
+          borderRadius: 6, padding: "2px 8px", marginLeft: 8,
+        }}>🎯 {gaps.length} Gap{gaps.length !== 1 ? "s" : ""} to Address</span>
+        <span className={`chevron ${open ? "open" : ""}`}>▼</span>
+      </div>
+      {open && (
+        <div className="section-card-body" style={{ paddingTop: 8 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+            {rep} didn't capture the following fields. Here's what to ask next time:
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {gaps.map(({ field, question }) => (
+              <div key={field} style={{
+                padding: "12px 16px", background: "#FFFBEB",
+                border: "1.5px solid #FDE68A", borderRadius: 10,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#D97706", marginBottom: 4 }}>{field}</div>
+                <div style={{ fontSize: 13.5, color: "var(--text)", lineHeight: 1.5 }}>💬 "{question}"</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Reusable Salesforce field component
 function SFField({ label, hint, value, rows, onChange, copied, onCopy }) {
   return (
@@ -224,6 +280,7 @@ export default function App() {
           setResults(r);
           setStories(data.stories || []);
           setProposalData(data.proposalData || null);
+          setSfData(data.sfData || null);
           setAuthed(true);
           setIsSharedView(true);
         })
@@ -364,7 +421,7 @@ export default function App() {
       const res = await fetch("/api/save-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ results, stories, proposalData }),
+        body: JSON.stringify({ results, stories, proposalData, sfData }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -499,20 +556,21 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
 
       // Initialize Salesforce fields from parsed data
       const today = new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" });
+      const repPlaceholder = (field) => `${repName || "Sales rep"} needs to address "${field}" in next conversation`;
       setSfData({
-        metrics: "",
-        economicBuyer: "",
-        decisionCriteria: "",
-        decisionProcess: "",
+        metrics: repPlaceholder("Metrics"),
+        economicBuyer: repPlaceholder("Economic Buyer"),
+        decisionCriteria: repPlaceholder("Decision Criteria"),
+        decisionProcess: repPlaceholder("Decision Process"),
         identifyPain: (parsed.currentSituation || []).join("; "),
-        competition: "",
-        champion: "",
-        timeline: "",
+        competition: repPlaceholder("Competition"),
+        champion: repPlaceholder("Champion"),
+        timeline: repPlaceholder("Timeline"),
         discoCompletedDate: today,
-        demoCompletedDate: "",
-        atsProvider: "",
-        opportunityHRProvider: "",
-        atsRenewalDate: "",
+        demoCompletedDate: repPlaceholder("Demo Completed Date"),
+        atsProvider: repPlaceholder("ATS Provider"),
+        opportunityHRProvider: repPlaceholder("Opportunity HR Provider"),
+        atsRenewalDate: repPlaceholder("Current ATS Renewal Date"),
         reasonsToWin: (parsed.positiveOutcomes || []).slice(0, 3).map(i => i.outcome || i).join("; "),
         potentialRoadblocks: (parsed.objectionsRaised || []).join("; "),
         nextSteps: (parsed.recommendedNextSteps || []).join("; "),
@@ -1135,6 +1193,12 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                   )}
                 </div>
               )}
+
+              {/* SF Coaching Widget */}
+              {sfData && (
+                <SFCoachingWidget sfData={sfData} repName={repName} results={results} />
+              )}
+
             </div>
           )}
         </main>
