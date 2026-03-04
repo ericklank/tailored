@@ -5,6 +5,9 @@
       "schedule": "0 2 * * 1"
     }
   ],
+  "rewrites": [
+    { "source": "/report/:id", "destination": "/index.html" }
+  ],
   "functions": {
     "api/crawl.js": {
       "maxDuration": 300
