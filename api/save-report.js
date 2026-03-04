@@ -1,32 +1,34 @@
-import { createClient } from "redis";
-import { randomBytes } from "crypto";
+import { createClient } from 'redis';
+import { randomBytes } from 'crypto';
 
-const REPORT_TTL = 60 * 60 * 24 * 90; // 90 days
-
-async function getRedis() {
-  const client = createClient({ url: process.env.tailored_REDIS_URL });
-  await client.connect();
-  return client;
-}
+const REPORT_TTL = 60 * 60 * 24 * 30;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { report, password } = req.body;
-  if (!report) return res.status(400).json({ error: "No report data" });
-  if (password !== process.env.APP_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
-
-  let redis;
+  let client;
   try {
-    redis = await getRedis();
-    const id = randomBytes(4).toString("hex"); // e.g. "a3f2c1d4"
-    const key = `report:${id}`;
-    await redis.set(key, JSON.stringify(report), { EX: REPORT_TTL });
-    await redis.quit();
-    res.status(200).json({ id, url: `${process.env.APP_URL || "https://tailored-zeta.vercel.app"}/report/${id}` });
+    let report = req.body;
+    if (typeof report === 'string') report = JSON.parse(report);
+    if (!report || (!report.results && !report.prospectName)) {
+      return res.status(400).json({ error: 'No report data' });
+    }
+
+    client = createClient({ url: process.env.tailored_REDIS_URL });
+    await client.connect();
+
+    const id = randomBytes(4).toString('hex');
+    await client.setEx(`report:${id}`, REPORT_TTL, JSON.stringify(report));
+    await client.disconnect();
+
+    return res.status(200).json({ id, url: `https://tailored-zeta.vercel.app/report/${id}` });
   } catch (err) {
-    if (redis) try { await redis.quit(); } catch {}
-    console.error("save-report error:", err);
-    res.status(500).json({ error: err.message });
+    if (client) await client.disconnect().catch(() => {});
+    console.error('save-report error:', err);
+    return res.status(500).json({ error: err.message });
   }
 }
