@@ -156,7 +156,20 @@ export default function App() {
   const [openProposal, setOpenProposal] = useState(false);
   const [openEmail, setOpenEmail] = useState(false);
 
-  const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleSection = (key) => {
+    // Find if this section has a pair (same row, span=1)
+    const pairs = [
+      ["currentSituation", "positiveOutcomes"],
+      ["suggestedOutcomes", "objectionsRaised"],
+    ];
+    const pair = pairs.find(p => p.includes(key));
+    if (pair) {
+      const isOpen = !openSections[key];
+      setOpenSections(prev => ({ ...prev, [pair[0]]: isOpen, [pair[1]]: isOpen }));
+    } else {
+      setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+    }
+  };
 
   // On mount: check if this is a shared report URL
   useEffect(() => {
