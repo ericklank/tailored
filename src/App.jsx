@@ -1070,7 +1070,7 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
 
               {/* Salesforce Fields — collapsible */}
               {sfData && (
-                <div className="section-card" style={{ marginBottom: 20 }}>
+                <div className="section-card" style={{ marginBottom: 60 }}>
                   <div className="section-card-header" onClick={() => setOpenSalesforce(v => !v)}>
                     <div className="section-pip" style={{ background: "#00A1E0" }} />
                     <span className="section-title">Salesforce Fields</span>
