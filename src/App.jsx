@@ -5,7 +5,8 @@ const SECTIONS = [
   { key: "positiveOutcomes", label: "Discussed in Call", color: "#00C896", span: 1 },
   { key: "suggestedOutcomes", label: "You Might Have Missed", color: "#FF8C42", span: 1, badge: "💡 AI Suggested" },
   { key: "objectionsRaised", label: "Objections Raised", color: "#E0294A", span: 1 },
-  { key: "recommendedNextSteps", label: "Recommended Next Steps", color: "#6C63FF", span: 2 },
+  { key: "digDeeper", label: "Dig Deeper", color: "#0EA5E9", span: 1, badge: "🔍 Follow Up" },
+  { key: "recommendedNextSteps", label: "Recommended Next Steps", color: "#6C63FF", span: 1 },
 ];
 
 const styles = `
@@ -123,6 +124,41 @@ const styles = `
   }
 `;
 
+// Reusable Salesforce field component
+function SFField({ label, hint, value, rows, onChange, copied, onCopy }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+        <div>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--text-muted)" }}>{label}</span>
+          {hint && <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 6, fontStyle: "italic" }}>— {hint}</span>}
+        </div>
+        <button
+          onClick={onCopy}
+          style={{
+            padding: "3px 10px", fontSize: 11, fontWeight: 600,
+            background: copied ? "#00C896" : "var(--surface)",
+            color: copied ? "white" : "var(--text-muted)",
+            border: "1.5px solid var(--border)", borderRadius: 6,
+            fontFamily: "'DM Sans', sans-serif", cursor: "pointer", transition: "all 0.15s",
+          }}
+        >{copied ? "✓ Copied" : "Copy"}</button>
+      </div>
+      <textarea
+        value={value}
+        rows={rows || 2}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width: "100%", padding: "8px 12px",
+          border: "1.5px solid var(--border)", borderRadius: 8,
+          fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: "var(--text)",
+          background: "white", outline: "none", resize: "vertical", lineHeight: 1.5,
+        }}
+      />
+    </div>
+  );
+}
+
 export default function App() {
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState("");
@@ -155,12 +191,15 @@ export default function App() {
   const [openStories, setOpenStories] = useState(false);
   const [openProposal, setOpenProposal] = useState(false);
   const [openEmail, setOpenEmail] = useState(false);
+  const [openSalesforce, setOpenSalesforce] = useState(false);
+  const [sfData, setSfData] = useState(null);
+  const [sfCopied, setSfCopied] = useState({});
 
   const toggleSection = (key) => {
-    // Find if this section has a pair (same row, span=1)
     const pairs = [
       ["currentSituation", "positiveOutcomes"],
       ["suggestedOutcomes", "objectionsRaised"],
+      ["digDeeper", "recommendedNextSteps"],
     ];
     const pair = pairs.find(p => p.includes(key));
     if (pair) {
@@ -391,7 +430,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           password,
-          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these eight keys: prospectName, prospectCompany, employeeCount, currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, recommendedNextSteps.
+          system: `You are a sales intelligence analyst for Teamtailor, an ATS platform. Analyze the provided sales call transcript and return ONLY a JSON object with exactly these nine keys: prospectName, prospectCompany, employeeCount, currentSituation, positiveOutcomes, suggestedOutcomes, objectionsRaised, digDeeper, recommendedNextSteps.
 
 Rules:
 - prospectName: string, first name of the prospect (person being sold to, not the sales rep)
@@ -401,6 +440,7 @@ Rules:
 - positiveOutcomes: 3-8 objects for features ACTUALLY DISCUSSED in the call. Each object: "outcome" ("[Feature Name] — [how it solves their specific problem]") and "articleQuery" (3-6 word search query for most relevant Teamtailor support article)
 - suggestedOutcomes: 3-5 objects for Teamtailor features NOT discussed but that would clearly benefit this prospect. Each object: "outcome" ("[Feature Name] — [why this would benefit them]") and "articleQuery" (3-6 word search query)
 - objectionsRaised: 3-5 bullets of concerns or blockers raised
+- digDeeper: 3-5 bullets of topics the prospect mentioned that were not fully explored, questions left unanswered, or areas where more discovery is needed. Format as "[Topic] — [why this matters / suggested follow-up question]"
 - recommendedNextSteps: 3-5 bullets of concrete next actions
 
 positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arrays of strings except prospectName/prospectCompany/employeeCount which are primitives. No preamble, no markdown, just raw JSON.`,
@@ -456,6 +496,28 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
         repPhone: repPhone,
       });
       setShowProposal(false);
+
+      // Initialize Salesforce fields from parsed data
+      const today = new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" });
+      setSfData({
+        metrics: "",
+        economicBuyer: "",
+        decisionCriteria: "",
+        decisionProcess: "",
+        identifyPain: (parsed.currentSituation || []).join("; "),
+        competition: "",
+        champion: "",
+        timeline: "",
+        discoCompletedDate: today,
+        demoCompletedDate: "",
+        atsProvider: "",
+        opportunityHRProvider: "",
+        atsRenewalDate: "",
+        reasonsToWin: (parsed.positiveOutcomes || []).slice(0, 3).map(i => i.outcome || i).join("; "),
+        potentialRoadblocks: (parsed.objectionsRaised || []).join("; "),
+        nextSteps: (parsed.recommendedNextSteps || []).join("; "),
+        mostRecentUpdate: `${today} Who: \nWhat: \nWhen: `,
+      });
 
       try {
         const storyQuery = [
@@ -1005,6 +1067,74 @@ positiveOutcomes and suggestedOutcomes are arrays of objects. All others are arr
                   </div>
                 )}
               </div>
+
+              {/* Salesforce Fields — collapsible */}
+              {sfData && (
+                <div className="section-card" style={{ marginBottom: 60 }}>
+                  <div className="section-card-header" onClick={() => setOpenSalesforce(v => !v)}>
+                    <div className="section-pip" style={{ background: "#00A1E0" }} />
+                    <span className="section-title">Salesforce Fields</span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, color: "#00A1E0",
+                      background: "#00A1E015", border: "1px solid #00A1E040",
+                      borderRadius: 6, padding: "2px 8px", marginLeft: 8,
+                    }}>☁ Auto-filled</span>
+                    <span className={`chevron ${openSalesforce ? "open" : ""}`}>▼</span>
+                  </div>
+                  {openSalesforce && (
+                    <div className="section-card-body" style={{ paddingTop: 12 }}>
+                      {/* Next Steps section */}
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#00A1E0", marginBottom: 12 }}>Next Steps</div>
+                      {[
+                        { key: "nextSteps", label: "Next Steps", rows: 2 },
+                        { key: "mostRecentUpdate", label: "Most Recent Update", rows: 4, hint: "Who / What / When format" },
+                      ].map(({ key, label, rows, hint }) => (
+                        <SFField key={key} label={label} hint={hint} value={sfData[key]} rows={rows}
+                          onChange={v => setSfData(p => ({ ...p, [key]: v }))}
+                          copied={sfCopied[key]}
+                          onCopy={() => {
+                            navigator.clipboard.writeText(sfData[key]);
+                            setSfCopied(p => ({ ...p, [key]: true }));
+                            setTimeout(() => setSfCopied(p => ({ ...p, [key]: false })), 2000);
+                          }}
+                        />
+                      ))}
+
+                      {/* Discovery section */}
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#00A1E0", margin: "24px 0 12px" }}>Discovery</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        {[
+                          { key: "metrics", label: "Metrics", rows: 2 },
+                          { key: "timeline", label: "Timeline", rows: 2 },
+                          { key: "economicBuyer", label: "Economic Buyer", rows: 2 },
+                          { key: "discoCompletedDate", label: "Disco Completed Date", rows: 1 },
+                          { key: "decisionCriteria", label: "Decision Criteria", rows: 2 },
+                          { key: "demoCompletedDate", label: "Demo Completed Date", rows: 1 },
+                          { key: "decisionProcess", label: "Decision Process", rows: 2 },
+                          { key: "atsProvider", label: "ATS Provider", rows: 1 },
+                          { key: "identifyPain", label: "Identify Pain", rows: 3 },
+                          { key: "opportunityHRProvider", label: "Opportunity HR Provider", rows: 1 },
+                          { key: "competition", label: "Competition", rows: 2 },
+                          { key: "atsRenewalDate", label: "Current ATS Renewal Date", rows: 1 },
+                          { key: "champion", label: "Champion", rows: 2 },
+                          { key: "reasonsToWin", label: "Reasons to Win", rows: 3 },
+                          { key: "potentialRoadblocks", label: "Potential Roadblocks", rows: 3 },
+                        ].map(({ key, label, rows }) => (
+                          <SFField key={key} label={label} value={sfData[key]} rows={rows}
+                            onChange={v => setSfData(p => ({ ...p, [key]: v }))}
+                            copied={sfCopied[key]}
+                            onCopy={() => {
+                              navigator.clipboard.writeText(sfData[key]);
+                              setSfCopied(p => ({ ...p, [key]: true }));
+                              setTimeout(() => setSfCopied(p => ({ ...p, [key]: false })), 2000);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </main>
